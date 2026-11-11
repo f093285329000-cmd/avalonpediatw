@@ -22,7 +22,7 @@
  * 再挑被別人的提議選進隊伍比較多次的人（被越多人選的人越可能是好人），再挑在提議紀錄裡比較早出現的人；都一樣才照座位序（並計數，應該幾乎不會發生）。
  * 梅林（11/11 晚、lp39 LH-12）：先用忠臣看得到的公開範圍（他看得到的紅已被拿掉，除非只剩他們），範圍內用忠臣的公開視角排序，
  * 不讓刺客從湖法看出梅林；位元 16 = 改用梅林自己的後驗排序（只量）。
- * 診斷用的位元（只量）：32 = 第 1 湖 FS 照原本的規則；64 = 只用在第 1 湖；128 = 只用在第 2、3 湖。
+ * 診斷用的位元（只量）：32 = 第 1 湖 FS 照原本的規則；64 = 只用在第 1 湖；128 = 只用在第 2、3 湖；256 = 只用在第 2 湖（第 42 回合）。
  */
 import type { PlayerObservation } from './types';
 import type { AgentTuning } from './AgentTuning';
@@ -121,6 +121,7 @@ export function goodLake41Pick(
   if ((bits & 32) && st.lake === 0 && st.score === 'FS') return null;
   if ((bits & 64) && st.lake > 0) return null;
   if ((bits & 128) && st.lake === 0) return null;
+  if ((bits & 256) && st.lake !== 1) return null;
   const keep = (xs: Lake39Candidate[], f: (c: Lake39Candidate) => boolean): Lake39Candidate[] => {
     const k = xs.filter(f);
     return k.length > 0 ? k : xs;

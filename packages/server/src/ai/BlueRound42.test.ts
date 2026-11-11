@@ -1,0 +1,86 @@
+/**
+ * 優化迴圈第 42 回合・藍方（第 3 階段）：湖的規則只用在第 2 湖（`goodLake41` 位元 256，只量）、
+ * 宣告紅的持湖者第 3 局不上隊的較鬆版本（`loyalLakeHolderP42`：只在自己估持湖者是紅的機率夠高時才不帶）。全部預設關。
+ */
+import { describe, expect, it } from 'vitest';
+import type { PlayerObservation } from './types';
+import { DEFAULT_AGENT_TUNING, LEGACY_AGENT_TUNING, parseTuningFlag } from './AgentTuning';
+import { goodLake41Pick } from './BlueRound41';
+import { lakeHolderBarred40 } from './BlueRound39';
+import { bayesOptionsOf, bayesRedShare } from './belief/BayesBelief';
+
+const IDS = Array.from({ length: 10 }, (_, i) => `P${i + 1}`);
+const asObs = (o: object) => o as unknown as PlayerObservation;
+const T = (over: object) => ({ ...DEFAULT_AGENT_TUNING, ...over });
+const vote = (round: number, attempt: number, leader: string, team: string[], yes: string[]) => ({
+  round, attempt, leader, team, approved: yes.length > 5, votes: Object.fromEntries(IDS.map((id) => [id, yes.includes(id)])),
+});
+const base = {
+  myPlayerId: 'P10', myRole: 'loyal', myTeam: 'good', seatTeam: 'good', playerCount: 10, allPlayerIds: IDS, knownEvils: [], evilCount: 4,
+  lakeHistory: [], myLakeResults: [], proposedTeam: [], failCount: 0,
+};
+const R1 = [
+  vote(1, 1, 'P1', ['P1', 'P2', 'P3'], ['P1', 'P2', 'P3']), vote(1, 2, 'P2', ['P2', 'P4', 'P6'], ['P2', 'P4', 'P6']),
+  vote(1, 3, 'P3', ['P3', 'P5', 'P9'], ['P3', 'P5', 'P9']), vote(1, 4, 'P4', ['P4', 'P7', 'P10'], ['P4', 'P7', 'P10']),
+  vote(1, 5, 'P5', ['P5', 'P1', 'P8'], IDS),
+];
+const R2 = [
+  vote(2, 1, 'P6', ['P6', 'P2', 'P3', 'P4'], ['P6', 'P2', 'P3', 'P4']), vote(2, 2, 'P7', ['P7', 'P2', 'P3', 'P9'], ['P7', 'P2', 'P3', 'P9']),
+  vote(2, 3, 'P8', ['P8', 'P4', 'P6', 'P9'], ['P8', 'P4', 'P6', 'P9']), vote(2, 4, 'P9', ['P9', 'P2', 'P4', 'P7'], ['P9', 'P2', 'P4', 'P7']),
+  vote(2, 5, 'P10', ['P10', 'P1', 'P3', 'P4'], IDS),
+];
+const R3 = [vote(3, 1, 'P1', ['P1', 'P2', 'P6', 'P7'], ['P1', 'P2', 'P6', 'P7', 'P8', 'P9'])];
+const VALID = IDS.filter((id) => id !== 'P10');
+const QH1 = [{ round: 1, team: ['P5', 'P1', 'P8'], result: 'success', failCount: 0 }, { round: 2, team: ['P10', 'P1', 'P3', 'P4'], result: 'fail', failCount: 1 }];
+const lake1 = asObs({ ...base, currentRound: 2, gamePhase: 'lake', questResults: ['success', 'fail'], voteHistory: [...R1, ...R2], questHistory: QH1 });
+const lake2 = asObs({
+  ...base, currentRound: 3, gamePhase: 'lake', questResults: ['success', 'fail', 'fail'], voteHistory: [...R1, ...R2, ...R3],
+  questHistory: [...QH1, { round: 3, team: ['P1', 'P2', 'P6', 'P7'], result: 'fail', failCount: 1 }],
+  lakeHistory: [{ round: 2, holderId: 'P9', targetId: 'P5', declaredClaim: 'good' }],
+});
+
+describe('round 42 tuning fields', () => {
+  it('off in the legacy table and the default; flags parse', () => {
+    expect(LEGACY_AGENT_TUNING.loyalLakeHolderP42).toBe(0);
+    expect(DEFAULT_AGENT_TUNING.loyalLakeHolderP42).toBe(0);
+    expect(parseTuningFlag('loyalLakeHolderP42')).toEqual({ loyalLakeHolderP42: 0.3 });
+    expect(parseTuningFlag('loyalLakeHolderP42=0.45')).toEqual({ loyalLakeHolderP42: 0.45 });
+    expect(() => parseTuningFlag('loyalLakeHolderP42=1.5')).toThrow();
+    expect(parseTuningFlag('goodLake41=259')).toEqual({ goodLake41: 259 });
+  });
+});
+
+describe('goodLake41 bit 256: the lake rule at lake 2 only', () => {
+  it('lake 1 falls back to the old rule (null); lake 2 picks as goodLake41=3 does', () => {
+    expect(goodLake41Pick(T({ goodLake41: 3 }), lake1, VALID)).not.toBeNull();
+    expect(goodLake41Pick(T({ goodLake41: 259 }), lake1, VALID)).toBeNull();
+    const full = goodLake41Pick(T({ goodLake41: 3 }), lake2, VALID);
+    expect(full).not.toBeNull();
+    expect(goodLake41Pick(T({ goodLake41: 259 }), lake2, VALID)).toBe(full);
+  });
+  it('a last lake (lake 3) also falls back', () => {
+    const lake3 = asObs({
+      ...(lake2 as object), currentRound: 4, questResults: ['success', 'fail', 'fail', 'success'],
+      questHistory: [...(lake2.questHistory as object[]), { round: 4, team: ['P1', 'P2', 'P3', 'P6', 'P7'], result: 'success', failCount: 0 }],
+      lakeHistory: [...(lake2.lakeHistory ?? []), { round: 3, holderId: 'P5', targetId: 'P8', declaredClaim: 'good' }],
+    });
+    expect(goodLake41Pick(T({ goodLake41: 259 }), lake3, VALID)).toBeNull();
+  });
+});
+
+describe('loyalLakeHolderP42: the failed-mission holder is barred only when own P(holder red) reaches the bar', () => {
+  const obs = asObs({
+    ...base, myPlayerId: 'P1', currentRound: 3, gamePhase: 'team_select', questResults: ['success', 'fail'], voteHistory: [...R1, ...R2], questHistory: QH1,
+    lakeHistory: [{ round: 2, holderId: 'P10', targetId: 'P5', declaredClaim: 'evil' }],
+  });
+  it('0 = bit 2 as before; a bar at or below P(holder red) bars; above it keeps the holder', () => {
+    const pH = bayesRedShare(obs, bayesOptionsOf(T({ loyalLakePair: 3 }))).get('P10')!;
+    expect(pH).toBeGreaterThan(0.01);
+    expect(pH).toBeLessThan(0.99);
+    expect(lakeHolderBarred40(T({ loyalLakePair: 2 }), obs)).toBe('P10');
+    expect(lakeHolderBarred40(T({ loyalLakePair: 2, loyalLakeHolderP42: Math.max(0.001, pH - 0.01) }), obs)).toBe('P10');
+    expect(lakeHolderBarred40(T({ loyalLakePair: 2, loyalLakeHolderP42: Math.min(1, pH + 0.01) }), obs)).toBeNull();
+    // without bit 2 the knob does nothing
+    expect(lakeHolderBarred40(T({ loyalLakeHolderP42: 0.001 }), obs)).toBeNull();
+  });
+});
