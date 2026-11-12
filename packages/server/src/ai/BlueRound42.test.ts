@@ -1,11 +1,16 @@
 /**
  * 優化迴圈第 42 回合・藍方（第 3 階段）：湖的規則只用在第 2 湖（`goodLake41` 位元 256，只量）、
- * 宣告紅的持湖者第 3 局不上隊的較鬆版本（`loyalLakeHolderP42`：只在自己估持湖者是紅的機率夠高時才不帶）。全部預設關。
+ * 宣告紅的持湖者第 3 局不上隊的較鬆版本（`loyalLakeHolderP42`：只在自己估持湖者是紅的機率夠高時才不帶）；
+ * 梅林在隊上偶爾贊成有他看得到的紅的關鍵隊的條件（`merlinKeyApprove42`；專案負責人 11/12：場內可以偶爾投白、不能開外白）。全部預設關。
  */
 import { describe, expect, it } from 'vitest';
 import type { PlayerObservation } from './types';
 import { DEFAULT_AGENT_TUNING, LEGACY_AGENT_TUNING, parseTuningFlag } from './AgentTuning';
-import { goodLake41Pick } from './BlueRound41';
+import { goodLake41Pick, merlinKeyApprove41Now } from './BlueRound41';
+import { HeuristicAgent } from './HeuristicAgent';
+import { SelfPlayEngine } from './SelfPlayEngine';
+import { ForwardAgent } from './forward/ForwardAgent';
+import type { AgentAction, AvalonAgent } from './types';
 import { lakeHolderBarred40 } from './BlueRound39';
 import { percivalRead39 } from './BlueRound39Percival';
 import { bayesOptionsOf, bayesRedShare } from './belief/BayesBelief';
@@ -104,4 +109,63 @@ describe('goodLake41, Percival: lakes as a loyal holding the thumb fact (INV-PL2
       }
     }
   });
+});
+
+describe('merlinKeyApprove42: where Merlin may approve on the team (owner 2026-11-12)', () => {
+  const key = asObs({
+    ...base, myPlayerId: 'P3', myRole: 'merlin', knownEvils: ['P5', 'P8', 'P9'], currentRound: 3, gamePhase: 'team_vote',
+    questResults: ['fail', 'fail'], proposedTeam: ['P2', 'P3', 'P5', 'P6'], currentLeader: 'P2', failCount: 0,
+  });
+  it('off in the legacy table and the default; flags parse', () => {
+    expect(LEGACY_AGENT_TUNING.merlinKeyApprove42).toBe(0);
+    expect(DEFAULT_AGENT_TUNING.merlinKeyApprove42).toBe(0);
+    expect(parseTuningFlag('merlinKeyApprove42')).toEqual({ merlinKeyApprove42: 7 });
+    expect(() => parseTuningFlag('merlinKeyApprove42=16')).toThrow();
+  });
+  it('bit 1 = round 3 only, bit 2 = exactly one seen red on the team, bit 4 = first proposal of the round', () => {
+    const on = (c: number, o: object = {}) => merlinKeyApprove41Now(T({ merlinKeyApprove41: 1, merlinKeyApprove42: c }), asObs({ ...(key as object), ...o }));
+    expect(on(7)).toBe(true);
+    expect(on(1, { currentRound: 4, proposedTeam: ['P2', 'P3', 'P5', 'P8', 'P6'] })).toBe(false);
+    expect(on(0, { currentRound: 4, proposedTeam: ['P2', 'P3', 'P5', 'P8', 'P6'] })).toBe(true);
+    expect(on(2, { proposedTeam: ['P3', 'P5', 'P8', 'P6'] })).toBe(false);
+    expect(on(0, { proposedTeam: ['P3', 'P5', 'P8', 'P6'] })).toBe(true);
+    expect(on(4, { failCount: 1 })).toBe(false);
+    expect(on(0, { failCount: 1 })).toBe(true);
+    // never off the team
+    expect(on(15, { proposedTeam: ['P2', 'P4', 'P5', 'P6'] })).toBe(false);
+  });
+  it('self-play: Merlin never approves a team he is not on that holds a red he sees, from round 3 (non-forced), with every Merlin vote knob on', async () => {
+    const tuning = {
+      ...DEFAULT_AGENT_TUNING, beliefPendingProposal: true, vote40KeyOnL: 0.6, vote40KeyOnP: 0.6, vote40KeyOnM: 0.6, vote40R5OnL: 0.5, vote40R5OnP: 0.5,
+      vote40R5OffL: 0.95, vote40R5OffP: 0.95, vote40R5OffM: 0.95, merlinKeyApprove41: 1, merlinKeyApprove42: 8,
+    };
+    let offSeen = 0, offSeenApprove = 0, onSeenApprove = 0;
+    class Probe implements AvalonAgent {
+      readonly agentType = 'heuristic' as const;
+      readonly inner: HeuristicAgent;
+      readonly fwd: ForwardAgent;
+      // the ForwardAgent called directly (as the invariant harness's AuditAgent does): under vitest the HeuristicAgent's lazy require of it fails
+      constructor(readonly agentId: string) { this.inner = new HeuristicAgent(agentId, undefined, undefined, { ...tuning }); this.fwd = new ForwardAgent(agentId, this.inner); }
+      onGameStart(obs: PlayerObservation): void { this.fwd.onGameStart(obs); }
+      act(obs: PlayerObservation): AgentAction {
+        const a = this.fwd.act(obs);
+        if (obs.myRole === 'merlin' && a.type === 'team_vote' && (obs.currentRound ?? 1) >= 3 && (obs.failCount ?? 0) < 4) {
+          const team = obs.proposedTeam ?? [];
+          const seen = team.some((id) => obs.knownEvils.includes(id));
+          if (seen && !team.includes(obs.myPlayerId)) { offSeen++; if (a.vote) offSeenApprove++; }
+          if (seen && team.includes(obs.myPlayerId) && a.vote) onSeenApprove++;
+        }
+        return a;
+      }
+      pickLakeTarget(obs: PlayerObservation, valid?: readonly string[]): string { return this.inner.pickLakeTarget(obs, valid); }
+      declareLake(obs: PlayerObservation, t: string, f: 'good' | 'evil' | undefined): 'good' | 'evil' | null { return this.inner.declareLake(obs, t, f); }
+      onGameEnd(obs: PlayerObservation, won: boolean): void { this.inner.onGameEnd(obs, won); }
+    }
+    const engine = new SelfPlayEngine();
+    for (let g = 0; g < 80; g++) await engine.runGame(Array.from({ length: 10 }, (_, i) => new Probe(`H-${i + 1}`)), false);
+    process.stdout.write(`merlin R3+ votes: off-team seen-red ${offSeen} (approve ${offSeenApprove}), on-team seen-red approve ${onSeenApprove}\n`);
+    expect(offSeen).toBeGreaterThan(0);
+    expect(offSeenApprove).toBe(0);
+    expect(onSeenApprove).toBeGreaterThan(0);
+  }, 240000);
 });

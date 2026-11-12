@@ -194,6 +194,12 @@ export function merlinKeyApprove41Now(tuning: Readonly<AgentTuning>, obs: Player
   if (round < 3 || round > 4 || (obs.failCount ?? 0) >= 4) return false;
   if ((obs.questResults ?? []).filter((r) => r === 'fail').length < 2) return false;
   if (!(obs.proposedTeam ?? []).includes(obs.myPlayerId) || obs.currentLeader === obs.myPlayerId) return false;
+  // 第 42 回合 `merlinKeyApprove42`：只在真人梅林贊成比較多的格子（真人：第 3 局 44%、第 4 局 15%；隊上一個看得到的紅 45%、兩個 25%；
+  // 第 3 局、一個看得到的紅、這一局第 1 次提議 55%）。
+  const cond = tuning.merlinKeyApprove42 ?? 0;
+  if ((cond & 1) && round !== 3) return false;
+  if ((cond & 2) && (obs.proposedTeam ?? []).filter((id) => obs.knownEvils.includes(id)).length !== 1) return false;
+  if ((cond & 4) && (obs.failCount ?? 0) !== 0) return false;
   // 雜湊鍵放進每一局都不一樣的公開狀態（提議的隊、到目前的提議次數、任務結果），不然同一個座位、同一局、同一次提議在每一局都是同一個答案。
   const team = [...(obs.proposedTeam ?? [])].sort().join(',');
   const key = `${obs.myPlayerId}|${round}|${obs.failCount ?? 0}|${team}|${(obs.voteHistory ?? []).length}|${(obs.questResults ?? []).join('')}|key41`;
