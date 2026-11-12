@@ -7,6 +7,7 @@ import type { PlayerObservation } from './types';
 import { DEFAULT_AGENT_TUNING, LEGACY_AGENT_TUNING, parseTuningFlag } from './AgentTuning';
 import { goodLake41Pick } from './BlueRound41';
 import { lakeHolderBarred40 } from './BlueRound39';
+import { percivalRead39 } from './BlueRound39Percival';
 import { bayesOptionsOf, bayesRedShare } from './belief/BayesBelief';
 
 const IDS = Array.from({ length: 10 }, (_, i) => `P${i + 1}`);
@@ -82,5 +83,25 @@ describe('loyalLakeHolderP42: the failed-mission holder is barred only when own 
     expect(lakeHolderBarred40(T({ loyalLakePair: 2, loyalLakeHolderP42: Math.min(1, pH + 0.01) }), obs)).toBeNull();
     // without bit 2 the knob does nothing
     expect(lakeHolderBarred40(T({ loyalLakeHolderP42: 0.001 }), obs)).toBeNull();
+  });
+});
+
+describe('goodLake41, Percival: lakes as a loyal holding the thumb fact (INV-PL2), except the read-confident Morgana (ruling (4))', () => {
+  it('same pick as the loyal clone for every mode and lake, or the clone picked the guarded thumb', () => {
+    for (const thumbs of [['P3', 'P4'], ['P1', 'P5'], ['P2', 'P9']]) {
+      for (const o of [lake1, lake2]) {
+        const perc = asObs({ ...(o as object), myRole: 'percival', knownWizards: thumbs });
+        const clone = asObs({ ...(perc as object), myRole: 'loyal' });
+        for (const mode of [1, 2, 3]) {
+          const a = goodLake41Pick(T({ goodLake41: mode }), perc, VALID);
+          const b = goodLake41Pick(T({ goodLake41: mode }), clone, VALID);
+          if (a !== b) {
+            const rd = percivalRead39(perc);
+            expect(rd?.unfav).toBe(b);
+            expect(rd!.conf).toBeGreaterThanOrEqual(0.7);
+          }
+        }
+      }
+    }
   });
 });
