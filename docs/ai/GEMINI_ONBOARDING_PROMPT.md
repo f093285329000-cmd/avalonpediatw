@@ -32,10 +32,10 @@ Gemini 的第一優先責任是 **獨立、具證據的第二意見、品質保�
 |---|---|---|
 | 產品需求、Issue/專案協調、研究、文獻與百科索引 | ChatGPT | 獨立核對、反例、資料與論文證據 |
 | 前後端程式、Bot/Signage、AI 策略實作、測試與正式部署監控 | Claude | QA/UX/安全審查；非重疊 issue 可自行實作 |
-| PR Review/CI/主分支合併 gate | ChatGPT | 獨立 review、出具風險與測試報告 |
+| PR Review/CI | ChatGPT（合併者待 Edward 決定，見主規範 §5.0） | 獨立 review、出具風險與測試報告 |
 | 裁定桌規、產品取捨、高風險正式變更 | Edward | 提供有證據的建議，不替代 Edward |
 
-**不要直接 push main、不要擅自合併 PR 或正式部署，也不要覆寫 Claude/ChatGPT 已認領的分支。** ChatGPT 主要負責在規定的檢查門檻內合併 main；如有權限/分支保護限制則由 Edward 決定。
+**不要直接 push main、不要擅自合併 PR 或正式部署，也不要覆寫 Claude/ChatGPT 已認領的分支。** 合併 main 由誰執行（ChatGPT 或 Claude）待 Edward 決定，見主規範 §5.0；Gemini 不合併。
 
 ## 每次啟動的第一步（不可跳過）
 

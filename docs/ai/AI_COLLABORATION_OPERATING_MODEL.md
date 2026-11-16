@@ -21,7 +21,7 @@
 | 只靠 repo 就能完成、範圍明確的 TS 伺服器修補、Web UI、測試補強、文件（Edward 11/16：「chatGPT 那邊不用耗 token，可以透過 chatGPT 執行的任務你可以安排給他」） | ChatGPT 或 Gemini（Claude 開 `[ChatGPT]`／`[Gemini]` Issue 交辦） | Claude 技術複核 | 合併見 §5.0 |
 | 資訊論、Bayes/CSP/Entropy/INFL、學術文獻、百科 SOP、研究原型 | ChatGPT | Gemini 來源獨立複核；Claude 程式 parity | Edward 決定研究方向；ChatGPT 整合 |
 | 獨立 QA、反例/狀態機測試、跨角色資訊洩漏、UX/易用性、研究主張再驗證 | Gemini | Claude 技術複核；ChatGPT 方法審查 | ChatGPT 輔助整合 / Edward 裁定優先級 |
-| 跨 AI 代碼審查、PR 風險、CI／規則／安全驗收 | ChatGPT | Gemini 獨立 review，Claude 提供測試與修正 | ChatGPT 合併至 main（需符合合併門檻） |
+| 跨 AI 代碼審查、PR 風險、CI／規則／安全驗收 | ChatGPT | Gemini 獨立 review，Claude 提供測試與修正 | 合併者見 §5.0（待 Edward 決定） |
 | 正式網站／Render/Firebase/其他環境部署、回滾和監控 | Claude | ChatGPT 審查部署風險；Gemini 獨立 smoke | Edward 高風險授權；依現有 CI/CD 執行 |
 
 **Gemini 並非只寫摘要**：可選獨立模組工程、Web QA、跨局面對抗、API 契約或 UX 修正，但必須先 CLAIM GitHub Issue、限定修改路徑、以 PR 證據交付。任何角色均可提出研究問題或 Bug；**每個 Issue 只能一位主責實作者**。
@@ -92,7 +92,7 @@ Edward 決定前，暫行做法：
 - 都用 `expected_head_sha` 合併。
 - `Workers Builds: avalonpediatw`（Cloudflare）在 main 上也一直失敗，是外部設定問題，不算在 CI 門檻裡；需要有權限的人到 Cloudflare 後台處理。
 
-**合併者 ChatGPT 依 Edward 2026-11-16 裁定負責，但須逐項驗證：**
+**合併門檻（不論 §5.0 最後由誰合併，合併者都要逐項驗證）：**
 
 1. GitHub PR diff、base/main SHA、Issue ownership 與目標清楚；若 PR 仍 Draft，先有 Ready-for-review 與實際審查。
 2. TypeScript/Socket/Signage/資料工作需有 fail-before/pass-after、type-check、lint、integration CI；策略工作還需合法角色視野、不看未來、真人/paired-seed 最終藍勝和刺殺生存驗收。
@@ -101,10 +101,10 @@ Edward 決定前，暫行做法：
 5. 重要房規、登入/安全、資料遷移、Secrets、可能中斷服務的高風險合併需 Edward 確認；若無法確認或 CI 失敗則阻塞不合併。
 6. 合併時綁定 `expected_head_sha`；確認 GitHub 回傳 `merged=true`、main SHA 和 CI/deploy。Claude 負責追蹤服務及回滾，Gemini 做獨立 smoke。
 
-## 6. 目前工作與避免重複
+## 6. 目前工作與避免重複（2026-11-16 的歷史快照，每次以 GitHub 最新狀態為準）
 
 - [Issue #16](https://github.com/l12203685/avalonpediatw/issues/16) 投票卡住已在 PR #18 合併，不重做；若再發有新證據另開回歸。
-- [Issue #17 / PR #19](https://github.com/l12203685/avalonpediatw/pull/19) 梅林湖中推理：Claude 實作，ChatGPT/Gemini 獨立審查邊界及回歸。
+- [Issue #17 / PR #19](https://github.com/l12203685/avalonpediatw/pull/19) 梅林湖中推理＋Edward 11/16「被湖中＋任務證明的紅一律不派」：已於 2026-11-16 12:57（台北）合併（d2511ad），Issue #17 已關閉；ChatGPT／Gemini 可做事後回歸驗證。
 - [PR #15](https://github.com/l12203685/avalonpediatw/pull/15) 獨立 Python 研究 v0.2：ChatGPT 研究，Claude 看 TS 介接，Gemini 做狀態模型/parity 交叉驗證。
 - [Issue #24](https://github.com/l12203685/avalonpediatw/issues/24) 全文文獻校驗：Claude 閱讀原文，ChatGPT 維護知識索引，Gemini 做出處/實驗範圍獨立查核。
 - [PR #25](https://github.com/l12203685/avalonpediatw/pull/25) 文獻 × 百科知識庫：ChatGPT 主維護，Claude/Gemini 審查術語和引用來源。
@@ -116,7 +116,7 @@ Edward 決定前，暫行做法：
 - [ ] Claude 實際改稿或在 PR #26 留 review（至少確認 RACI、部署、已有任務與 Gemini 可領取範圍）。
 - [ ] Gemini 已由 Edward 選定入口（Web、AI Studio、CLI 等）、取得此文件並在 Issue #27 或分派 Issue 留 ACK／實際 review。
 - [ ] 三方沒有相互競爭的 main 寫入、部署作業或重複 Issue。
-- [ ] Edward 確認分工後，PR #26 經檢查由 ChatGPT 合併 main；沒有完成這些條件以前使用 **Proposal / Draft** 標籤。
+- [ ] Edward 確認分工（含 §5.0 合併權）後，依確認的方式合併 PR #26；沒有完成這些條件以前使用 **Proposal / Draft** 標籤。
 
 ## 8. 常用回覆模版
 
@@ -125,7 +125,8 @@ ACK owner=gemini issue=#N scope=... branch=gemini/issue-N-... base_sha=<SHA>
 PROGRESS issue=#N changed=... tests=... blocked=none
 HANDOFF to ChatGPT pr=#N head_sha=<SHA> CI=... risk=... next=review/merge
 REVIEW by ChatGPT pr=#N decision=changes_requested|approved evidence=...
-MERGED by ChatGPT pr=#N merge_sha=<SHA> deploy_status=... owner=claude
+MERGING by <AI> pr=#N head_sha=<SHA>        # 合併前先留言，避免兩方同時合併
+MERGED by <AI> pr=#N merge_sha=<SHA> deploy_status=... owner=claude
 ```
 
 任何人沒有 GitHub 工具權限時，明確以「建議／待手動轉交」標示，絕不虛報寫入已發生。
