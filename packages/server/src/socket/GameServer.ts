@@ -2147,14 +2147,29 @@ export class GameServer {
                   console.error(`[bot] Vote trace failed for ${pid} in room ${roomId}:`, traceError);
                 }
                 eng.submitVote(pid, vote);
-                this.commitPracticeTrace(roomId, voteTrace);
-                const updated = this.roomManager.getRoom(roomId)!;
-              if (updated.state === 'ended') {
-                this.broadcastRoomState(roomId, updated);
-                this.onGameEnded(roomId, updated);
-                return;
-              }
-              this.broadcastRoomState(roomId, updated);
+                // The ballot is now committed. Optional trace / broadcast
+                // failures must not suppress scheduling the next phase or
+                // cause this accepted vote to be submitted a second time.
+                try {
+                  this.commitPracticeTrace(roomId, voteTrace);
+                } catch (traceCommitError) {
+                  console.error(`[bot] Vote trace commit failed for ${pid} in room ${roomId}:`, traceCommitError);
+                }
+                const updated = this.roomManager.getRoom(roomId);
+                if (!updated) return;
+                try {
+                  this.broadcastRoomState(roomId, updated);
+                } catch (broadcastError) {
+                  console.error(`[bot] Vote state broadcast failed for ${pid} in room ${roomId}:`, broadcastError);
+                }
+                if (updated.state === 'ended') {
+                  try {
+                    this.onGameEnded(roomId, updated);
+                  } catch (endError) {
+                    console.error(`[bot] Vote game-end hook failed for ${pid} in room ${roomId}:`, endError);
+                  }
+                  return;
+                }
               // Edward 2026-04-25 P0「輪到我投任務成功 就斷線」 — bot-as-last-
               // team-voter stuck-quest fix.
               //
