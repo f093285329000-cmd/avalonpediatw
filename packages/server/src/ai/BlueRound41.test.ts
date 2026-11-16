@@ -45,7 +45,7 @@ describe('round 41 tuning fields', () => {
     expect(parseTuningFlag('goodLake41=2')).toEqual({ goodLake41: 2 });
     expect(parseTuningFlag('beliefLakeIso41')).toEqual({ beliefLakeIso41: 1 });
     expect(parseTuningFlag('merlinKeyApprove41')).toEqual({ merlinKeyApprove41: 0.6 });
-    expect(() => parseTuningFlag('goodLake41=256')).toThrow();
+    expect(() => parseTuningFlag('goodLake41=512')).toThrow();
     expect(() => parseTuningFlag('merlinKeyApprove41=1.5')).toThrow();
   });
 });

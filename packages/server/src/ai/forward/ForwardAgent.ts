@@ -1066,7 +1066,10 @@ export class ForwardAgent implements AvalonAgent {
         // gate and the dominance gate bind.
         const keyApprove = onTeam && merlinKeyApprove41Now(this.baseline.tuning, obs) && goodVoteGate(obs, { ...this.gates, mustFail: false }) === null
           && goodVoteGate(loyalViewOf(obs), this.gates) === null;
-        const vote = asLoyal.action.vote && (!merlinVoteFatal(obs, this.baseline.tuning) || keyApprove)
+        // Round 42 `merlinKeyApprove42` bit 8: the key approve does not need the loyal view's approve (still on the team only).
+        const keyAlone = keyApprove && ((this.baseline.tuning.merlinKeyApprove42 ?? 0) & 8) !== 0;
+        // Owner 2026-11-12: on the team he may approve now and then (場內偶爾投白); off the team never a team holding a red he sees (不能開外白).
+        const vote = (asLoyal.action.vote || keyAlone) && (!merlinVoteFatal(obs, this.baseline.tuning) || keyApprove)
           && (onTeam || (!seenRed && goodVoteGate(obs, this.gates) === null));
         // Round 38 `merlinOnTeamOwn` (BlueRound38.ts; checklist AV-11): on the team, the public loyal threshold says reject and his seen reds
         // cannot lose on the spot — Merlin votes from his own view (human Merlins inner-black a team without a seen red 15%, the bot 41%).

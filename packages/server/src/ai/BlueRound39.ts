@@ -227,7 +227,13 @@ export function lakeHolderBarred40(tuning: Readonly<AgentTuning>, obs: PlayerObs
   if (!last || last.declaredClaim !== 'evil' || last.round !== (obs.currentRound ?? 1) - 1) return null;
   const me = obs.myPlayerId;
   if (last.holderId === me || last.targetId === me) return null;
-  if ((bits & 2) !== 0 && (obs.questHistory ?? []).some((q) => missionFailed(q) && q.team.includes(last.holderId))) return last.holderId;
+  if ((bits & 2) !== 0 && (obs.questHistory ?? []).some((q) => missionFailed(q) && q.team.includes(last.holderId))) {
+    // 第 42 回合 `loyalLakeHolderP42`：較鬆的版本，只在自己估這個持湖者是紅的機率夠高時才不帶（位元 2 一律不帶會比真人少帶很多）。
+    const tau = tuning.loyalLakeHolderP42 ?? 0;
+    if (tau <= 0) return last.holderId;
+    const pH = bayesRedShare(obs, bayesOptionsOf(tuning)).get(last.holderId) ?? 0.5;
+    if (pH >= tau) return last.holderId;
+  }
   if ((bits & 8) !== 0 && (bayesRedShare(obs, bayesOptionsOf(tuning)).get(last.targetId) ?? 0.5) < 0.5) return last.holderId;
   return null;
 }
