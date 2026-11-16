@@ -443,6 +443,7 @@ async function playGameInner(p: Page, room: string, seat: Seat, ended: { capture
   let pendingSince = 0; let pendingKey = '';
   const lakeUnseenLogged = new Set<number>();
   const lakeUnseenSince = new Map<number, number>();
+  const lakeRawLogged = new Set<number>();
   let stuckLogged = '';
   let lastPress = '';
   const done = new Map<string, number>(); // 決定的 key → 做完的時間
@@ -493,6 +494,11 @@ async function playGameInner(p: Page, room: string, seat: Seat, ended: { capture
     if (unseen !== null && !seat.declinedLakes.has(unseen) && !seat.myLake.some((m) => m.round === unseen + 2)) {
       const since = lakeUnseenSince.get(unseen) ?? Date.now();
       lakeUnseenSince.set(unseen, since);
+      if (!lakeRawLogged.has(unseen)) {
+        lakeRawLogged.add(unseen);
+        const to = s.lake_result[unseen]?.to;
+        plog(`${room} 湖結果還讀不到：對象 ${to ?? '-'} 標記 ${s.users.find((u) => u.set === to)?.role ?? '-'}`);
+      }
       if (Date.now() - since > 20_000 && !lakeUnseenLogged.has(unseen)) {
         lakeUnseenLogged.add(unseen);
         log(`${room} 20 秒讀不到自己湖到的結果，先不宣告（不擋後面的投票）`);
