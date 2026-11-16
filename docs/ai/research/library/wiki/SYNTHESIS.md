@@ -14,8 +14,8 @@
 
 - **百科來源**：`wiki-147` 湖中女神、[梅林](https://github.com/l12203685/avalonpediatw/blob/main/docs/avalon-wiki/角色/梅林.md)、[鐵邏輯](https://github.com/l12203685/avalonpediatw/blob/main/docs/avalon-wiki/入門基礎/鐵邏輯_正邏輯_反邏輯.md)。
 - **關鍵條件推理**：如果在梅林合法私有視角下 B 是**梅林看得到**的紅，A 湖 B 宣好，且 A 不在梅林三位可見紅之中；採用 A0 與 10 人標準配置時 A 必是未被梅林看到的紅，即莫德雷德。派西「拇指」與梅林「可見紅」的資訊來源不能互換。
-- **程式**：`Certainty.ts`、`LogicGates.ts`、`MerlinLoyalStyle.ts`；[Issue #17](https://github.com/l12203685/avalonpediatw/issues/17) 的 [PR #19](https://github.com/l12203685/avalonpediatw/pull/19) 已在處理『成功隊照派補人繞過已知紅 gate』，不可再重做。
-- **驗收**：A 宣 B 好、B 可見紅／未知／確定好、連鎖 A→B→C、L1 空世界、R1/R2 重用、第五次強制提議，各測 fail-before/pass-after；已裁定成功隊重用的例外須保留。
+- **程式**：`Certainty.ts`、`LogicGates.ts`、`MerlinLoyalStyle.ts`、`ProvenRed.ts`；[Issue #17](https://github.com/l12203685/avalonpediatw/issues/17) 的 [PR #19](https://github.com/l12203685/avalonpediatw/pull/19) 已合併（2026-11-16），並加入 Edward 同日裁定「任何已經被湖中女神＋任務證明的壞人都不該派」（`goodProvenRedBar`、不變量 INV-PR1），不可再重做。
+- **驗收**：A 宣 B 好、B 可見紅／未知／確定好、連鎖 A→B→C、L1 空世界、R1/R2 重用、第五次強制提議，各測 fail-before/pass-after；成功隊重用時，已被湖中＋任務證明的紅要換掉再補人（2026-11-16 裁定取代 11/01 對這種人的重用例外）。
 
 ## C. 單人嫌疑 vs 聯合隊伍全好機率
 
