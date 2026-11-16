@@ -6,6 +6,9 @@
 > Claude 開發需維持既有根目錄 `CLAUDE.md` 的指示。該檔指向開發者**本機** `C:\Users\admin\CLAUDE.md`，ChatGPT 無法讀本機，不得假設已同步。  
 > 若和 Edward 最新指示或現行專案裁定衝突，以最新明確裁定為準並在 Issue 記錄。
 
+
+> **2026-11-16 Gemini 加入提案（待 Claude 審查）**：此文件保留 ChatGPT × Claude 原有的分工及合併裁定。完整三方工作協議現請參閱 [三 AI 協作運作規範](AI_COLLABORATION_OPERATING_MODEL.md)、[Gemini 啟動 Prompt](GEMINI_ONBOARDING_PROMPT.md) 以及 [GitHub Issue #27](https://github.com/l12203685/avalonpediatw/issues/27)。Gemini 正在 onboarding 階段；**Claude 尚未實際 ACK，不代表已達三方共識。**
+
 ## 0. 2026-11-16 新裁定：main 合併負責者
 
 Edward 已將 **Pull Request 審查、驗收及合併至 `main` 的執行責任交給 ChatGPT**。Claude 以程式實作、重現 Bug、測試、維護部署流程為主要責任；Claude 完成開發後應提交 PR，將審查與合併需求交給 ChatGPT，而非不經交接直接合併。
