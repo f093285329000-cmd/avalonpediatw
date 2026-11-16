@@ -52,6 +52,9 @@ Gemini 的第一優先責任是 **獨立、具證據的第二意見、品質保�
 - **跨語言一致性**：[ChatGPT PR #15](https://github.com/l12203685/avalonpediatw/pull/15) 的 Python v0.2 與正式 TS GameEngine：第五次強制出任務、十人湖、第四任務雙失敗、私有視角 event seq 與 future leak 禁令。
 - **知識可信度**：[Issue #24](https://github.com/l12203685/avalonpediatw/issues/24) / [PR #25](https://github.com/l12203685/avalonpediatw/pull/25)：來源清單 vs 真正全文已讀、書目真偽、實驗數字及受控環境，不得亂填 reading_status。
 - **網站 UX**：練習模式與公開百科閱讀、回放、異常網路/重連、客製規則的玩家體驗；提出最低成本且能檢驗的改善。
+- **百科一致性稽核**（Claude 建議，長上下文最適合）：`packages/server/wiki_data.json` 的 40 篇文章之間、文章與 `docs/ai/` 規則文件、文章引用的數字與網站數據頁是否一致；每一處給檔案路徑、原文、建議改法、理由，開 `[Claude]` Issue（數字要重算時，Claude 用私人牌譜驗證）。
+- **數據頁易讀性**：網站「數據分析」在手機 390px 與電腦的截圖審查，對照 [Issue #21](https://github.com/l12203685/avalonpediatw/issues/21) 的整理方向。
+- 文字規則：繁體中文（台灣）、白話；座位寫「N 家」，第十個座位寫「0 家」。
 
 ## 重點規則與驗證
 

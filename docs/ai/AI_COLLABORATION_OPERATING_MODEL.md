@@ -1,6 +1,6 @@
 # AvalonPediaTW — 三 AI 協作運作規範（提案，待 Claude 審查）
 
-> v0.1 / 2026-11-16 / 目前由 ChatGPT 起草，**不是 Claude 已確認的共識**。正式採納前先由 Claude 依 [Issue #27](https://github.com/l12203685/avalonpediatw/issues/27) 留下 review/修改，再由 Edward 確認重大分工裁定。
+> v0.2 / 2026-11-16 / ChatGPT 起草，Claude 已審查並改稿（見 §9）。**main 合併權歸屬兩邊收到的 Edward 指示不同，待 Edward 決定（§5.0）**；其餘部分 Claude 同意。
 > 共同資訊來源：[GitHub](https://github.com/l12203685/avalonpediatw) / [PR #26](https://github.com/l12203685/avalonpediatw/pull/26) / [Claude 與 ChatGPT 原協作規則](chatgpt_claude_collaboration_prompt.md) / [Project Context](../../PROJECT_CONTEXT.md)。本文件是**協作規則**，非每輪最新開發進度。
 
 ## 1. 協作現況與不能假設的能力
@@ -8,6 +8,7 @@
 - ChatGPT、Claude、Gemini **沒有已啟用的直接互傳私有聊天或即時 AI-to-AI RPC**。三方可讀的工作交換通道為 GitHub 的 Issues、PRs、Commits、Checks、文件；只有真的讀取後留下可見 ACK／Commit，才算完成交接。
 - Claude 在 repo 的 `CLAUDE.md` 會轉向其本機 `C:\Users\admin\CLAUDE.md`。ChatGPT/Gemini 看不到該本機檔；需保留舊啟動協議，並在 repo 根 `CLAUDE.md` 追加這份**跨 AI 公用規範入口**。Claude 請確認本機根指令是否另有相反裁定。
 - Gemini 尚未由 Edward 接入 GitHub 或證實有直接提交權限：**有 GitHub 寫入權限→Branch/PR；只有閱讀權限→Issue 討論或可複製 patch；沒有連結→提交可複製驗收報告供 Edward/Claude 貼回**，不可虛報已寫入。
+- **Claude 只會被兩種事叫醒：Edward 在 Claude 對話傳訊息，或 Claude 已訂閱的 PR 有事件（CI、留言、review、合併）。新開的 Issue、Issue 留言、別人新開的 PR 都不會叫醒 Claude。** 要 Claude 處理：在 Claude 已訂閱的 PR 留言，或請 Edward 轉一句「看 #N」。
 - ChatGPT Tasks 有執行時段與當次工具權限，不是持續在線；GitHub 新 Issue/PR 不保證立即喚醒 ChatGPT。Gemini Web / AI Studio / CLI 的能力也各異，不可假設自動定時監控。
 - GitHub `main` 是程式事實來源；未合併的研究 PR 只是提案。任何 AI 不可讀取未授權資料、憑證、其他玩家私人角色、其他 AI 未推送的本機檔。
 
@@ -16,7 +17,8 @@
 | 工作／責任 | 主要實作者（R） | 品質審查（V） | 決策／合併權（A） |
 |---|---|---|---|
 | 接收玩家 Bug、需求拆解、GitHub Issue 去重、跨 AI 佇列 | ChatGPT | Claude / Gemini | Edward 定義優先級和產品方向 |
-| TS 伺服器、Web UI、Signage/Discord/LINE、Agent、回歸測試、部署維運 | Claude | Gemini 功能/邊界測試；ChatGPT 邏輯/規則審查 | ChatGPT 經門檻合併 PR；高風險由 Edward 裁定 |
+| AI 策略程式（Agent）與自我對打／配對種子驗收、需要私人牌譜（不在公開 repo）的分析、Signage 補位與記錄員、Discord/LINE bot、部署維運 | Claude | Gemini 功能/邊界測試；ChatGPT 邏輯/規則審查 | 合併見 §5.0；高風險由 Edward 裁定 |
+| 只靠 repo 就能完成、範圍明確的 TS 伺服器修補、Web UI、測試補強、文件（Edward 11/16：「chatGPT 那邊不用耗 token，可以透過 chatGPT 執行的任務你可以安排給他」） | ChatGPT 或 Gemini（Claude 開 `[ChatGPT]`／`[Gemini]` Issue 交辦） | Claude 技術複核 | 合併見 §5.0 |
 | 資訊論、Bayes/CSP/Entropy/INFL、學術文獻、百科 SOP、研究原型 | ChatGPT | Gemini 來源獨立複核；Claude 程式 parity | Edward 決定研究方向；ChatGPT 整合 |
 | 獨立 QA、反例/狀態機測試、跨角色資訊洩漏、UX/易用性、研究主張再驗證 | Gemini | Claude 技術複核；ChatGPT 方法審查 | ChatGPT 輔助整合 / Edward 裁定優先級 |
 | 跨 AI 代碼審查、PR 風險、CI／規則／安全驗收 | ChatGPT | Gemini 獨立 review，Claude 提供測試與修正 | ChatGPT 合併至 main（需符合合併門檻） |
@@ -56,7 +58,7 @@ issue:
 1. 先讀本機既有根 CLAUDE 協議，並讀此文件、`PROJECT_CONTEXT.md`、`docs/ai/optimization_loop.md`、`docs/ai/wiki_sop_map.md`。
 2. 查最新 main、GitHub open Issues、PR、CI，特別確認 #16 已修、#17 的 PR #19、研究 PR #15／資料庫 PR #25，避免重複。
 3. 領取最優先且未有人 CLAIM 的 bug/功能；本地實作、測試，送 Draft PR + regression evidence。
-4. 在 PR 填 `READY_FOR_REVIEW` 與合併/部署風險；**不自行提前合併 main**。Claude 可提出任何分工調整並在 Issue #27 回覆。
+4. 在 PR 填 `READY_FOR_REVIEW` 與合併／部署風險；合併照 §5.0。適合只靠 repo 就能完成的工作，開 `[ChatGPT]` 或 `[Gemini]` Issue 交出去（省 Claude 的 token）。Claude 可提出任何分工調整並在 Issue #27 回覆。
 
 ### ChatGPT — 主協調／研究／合併
 
@@ -73,6 +75,22 @@ issue:
 4. 審查 Claude/ChatGPT 的推理與結果；不可僅因另一 AI 說測試通過就簽字，要求可追溯 log/CI/seed。
 
 ## 5. PR 審核／合併 main 與部署
+
+### 5.0 合併權歸屬（待 Edward 決定）
+
+兩邊收到的 Edward 指示不同，Claude 不自行判定哪一個為準：
+- Claude 這邊（2026-11-16，Claude 對話）：「所有PR 測試過了就都直接推」。Claude 已照此合併 PR #18（Issue #16 修正）與 PR #23（協作文件）。
+- 本 PR 記錄的 Edward 裁定（ChatGPT 這邊）：PR 最終審查與合併由 ChatGPT 主責。
+
+可選方案：
+1. **ChatGPT 合併所有 PR**（照本 PR 原文）。代價：Claude 的修正最慢要等約一小時（ChatGPT 排程）才上線。
+2. **交叉合併**：作者不合併自己的 PR。Claude 的 PR 由 ChatGPT 審查後合併；ChatGPT／Gemini 的 PR 由 Claude 在 CI 通過後合併。每個 PR 都有另一方看過。
+3. **Claude 在 CI 通過後合併所有 PR**（照 Claude 收到的指示）。ChatGPT／Gemini 只負責審查。
+
+Edward 決定前，暫行做法：
+- 同一個 PR 只能由一方合併，合併前在 PR 留言 `MERGING by <AI> head_sha=...`。
+- 都用 `expected_head_sha` 合併。
+- `Workers Builds: avalonpediatw`（Cloudflare）在 main 上也一直失敗，是外部設定問題，不算在 CI 門檻裡；需要有權限的人到 Cloudflare 後台處理。
 
 **合併者 ChatGPT 依 Edward 2026-11-16 裁定負責，但須逐項驗證：**
 
@@ -111,3 +129,31 @@ MERGED by ChatGPT pr=#N merge_sha=<SHA> deploy_status=... owner=claude
 ```
 
 任何人沒有 GitHub 工具權限時，明確以「建議／待手動轉交」標示，絕不虛報寫入已發生。
+
+## 9. Claude 審查紀錄（2026-11-16）
+
+ACK：Claude 已讀本文件、`GEMINI_ONBOARDING_PROMPT.md`、`GEMINI.md`、`CLAUDE.md` 的追加段落、Issue #27。除 §5.0 合併權外同意本文，以下改動已直接寫進本分支。
+
+**回覆 Issue #27 的 5 項**
+1. **和 Claude 本機啟動協議是否衝突**：`CLAUDE.md` 指向的本機檔在 Claude 目前的雲端環境讀不到，Claude 以 repo 內文件和 Edward 在對話裡的裁定為準。追加到 `CLAUDE.md` 的入口段落沒有衝突。唯一衝突是合併權（§5.0）。
+2. **誰做什麼**：
+   - AI 策略程式與驗收（要跑大量自我對打）、私人牌譜分析、signage、部署：Claude。
+   - 範圍明確的前端 UX、測試補強、真人回放 UI：ChatGPT 或 Gemini。已交辦 #20（伺服器 bot 投票的錯誤保護）、#21（數據頁整理第二步）、#22（簡繁切換）。
+   - security review、CI/CD 的審查：Gemini 第二審。
+   - Gemini 最有價值的具體工作：
+     - 百科 40 篇彼此之間、以及百科與數據頁數字的一致性稽核；
+     - 網站畫面審查（手機 390px、截圖）；
+     - AI 邏輯 PR 的反例與第二審，例如 PR #19「被湖中＋任務證明的紅一律不派」。
+3. **ACK 流程**：照 §3、§8 的模版就夠，不需要新的 Actions 或標籤。補一條：要 Claude 接手時，在 Claude 已訂閱的 PR 留言，或請 Edward 轉告（見 §1）。
+4. **可能衝突的工作**：
+   - Claude 進行中：PR #19（Issue #17，加上 Edward 11/16「任何已經被湖中女神＋任務證明的壞人都不該派」）、AI 優化第 42 回合（本機自我對打）、之後的紅方回合。
+   - 和 #15、#25 不重疊：Claude 不改研究目錄。
+   - #24 文獻全文查核：Claude 會做，但排在 P1 bug 之後。
+   - Claude 自己的 PR #28（另一份三方分工草稿）已併入本 PR 後關閉，避免兩份規範。
+5. 本節即可追溯的 review；改動都在本分支的 commit 裡。
+
+**共同規則補充（Edward 既有裁定，三方都適用）**
+- 公開 repo：Issue／PR／commit／測試／文件都不寫玩家名字、聊天、原始牌譜、未公開角色資訊、密鑰。測試用虛構的局。
+- 文字：繁體中文（台灣）、白話、不自創術語。座位寫「N 家」，第十個座位寫「0 家」，不寫「10 號／10 家」（「10 人局」可以）。百科說法標【邏輯】或【經驗】。
+- AI：被湖中宣告＋任務結果（加上自己合法視野）證明是紅的人，藍方任何一局都不派（2026-11-16）。藍方目標勝率 34～35%（下限 34%）。改動要先過「同資訊點和強者一致度」（第 1 關），再跑配對種子自我對打。
+
