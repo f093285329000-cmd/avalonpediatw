@@ -11,6 +11,7 @@
 - [papers/INDEX.md](papers/INDEX.md)：來自跨 Chat 研究 v0.1 的 14 筆來源（11 篇 paper/preprint、2 個資料／程式來源、1 份規則來源）及原始網址。
 - [papers/READING_MATRIX.md](papers/READING_MATRIX.md)：逐篇正式驗收狀態；不把「有摘要」誤認為「已讀全文」。
 - [papers/NOTES.md](papers/NOTES.md)：先前 Claude 研究報告及今日研究假設的精華、限制、對 AI 的工程意義。
+- [wiki/ALL_ARTICLES.generated.md](wiki/ALL_ARTICLES.generated.md)：已從正式 `wiki_data.json` 建立 **40 筆網站條目 ID／標題／分類／來源預覽**快照，後續有正文修改時需重新生成。
 - [wiki/CATALOG.md](wiki/CATALOG.md)：`docs/avalon-wiki` 各個實際 Markdown 文件／QnA 的連結與文類，並指向網站專屬的 `packages/server/wiki_data.json`。
 - [wiki/SYNTHESIS.md](wiki/SYNTHESIS.md)：百科策略 × 文獻 × 現行 AI × 具體測試條件的交叉對照。
 - [METHOD.md](METHOD.md)：引用格式、硬／軟邏輯、閱讀驗證、跨 AI 領任務及避免資料分裂的規則。
