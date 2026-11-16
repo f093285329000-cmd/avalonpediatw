@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { useDiscoveryNav } from '../../../web/src/components/analysis/discovery/discoveryNav';
 
 const web = path.resolve(__dirname, '..', '..', '..', 'web', 'src');
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- 讀 i18n JSON，結構很深
 const load = (lang: string): Record<string, any> => JSON.parse(fs.readFileSync(path.join(web, 'i18n', 'locales', lang, 'common.json'), 'utf-8'));
 const page = fs.readFileSync(path.join(web, 'pages', 'AnalyticsPage.tsx'), 'utf-8');
 const tabIds = [...page.matchAll(/\{ id: '(\w+)',\s+labelKey: 'analytics\.analysis\.tabs\.\1'/g)].map((m) => m[1]);
