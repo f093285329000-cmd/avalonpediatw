@@ -1,6 +1,6 @@
 # GEMINI.md — AvalonPediaTW Project Agent Entry
 
-> 2026-11-16; **proposed tri-agent collaboration, pending Claude review in Issue #27**.
+> 2026-11-16; tri-agent collaboration **adopted** (drafted by ChatGPT, reviewed by Claude, confirmed by Edward). Merges are cross-merges: your PRs are merged by Claude after CI passes.
 
 ## Before any task
 

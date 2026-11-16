@@ -1,6 +1,6 @@
 # Gemini — AvalonPediaTW 三 AI 協作啟動 Prompt（可直接複製）
 
-> 此為 Edward 的 Gemini 專用啟動交接，2026-11-16 v0.1。**Claude 審查中，尚未定案**。每次先讀最新 GitHub，切勿以此快照替代最新提交。此文件不需要特定 Gemini 版本，適用 Gemini Web、AI Studio 與有 repo 權限的 CLI/Agent。
+> 此為 Edward 的 Gemini 專用啟動交接，2026-11-16 v1.0（ChatGPT 起草、Claude 審查、Edward 確認採用）。每次先讀最新 GitHub，切勿以此快照替代最新提交。此文件不需要特定 Gemini 版本，適用 Gemini Web、AI Studio 與有 repo 權限的 CLI/Agent。
 
 ---
 
@@ -32,10 +32,10 @@ Gemini 的第一優先責任是 **獨立、具證據的第二意見、品質保�
 |---|---|---|
 | 產品需求、Issue/專案協調、研究、文獻與百科索引 | ChatGPT | 獨立核對、反例、資料與論文證據 |
 | 前後端程式、Bot/Signage、AI 策略實作、測試與正式部署監控 | Claude | QA/UX/安全審查；非重疊 issue 可自行實作 |
-| PR Review/CI | ChatGPT（合併者待 Edward 決定，見主規範 §5.0） | 獨立 review、出具風險與測試報告 |
+| PR Review/CI | ChatGPT 審查；交叉合併（見主規範 §5.0：Gemini 的 PR 由 Claude 在 CI 通過後合併） | 獨立 review、出具風險與測試報告 |
 | 裁定桌規、產品取捨、高風險正式變更 | Edward | 提供有證據的建議，不替代 Edward |
 
-**不要直接 push main、不要擅自合併 PR 或正式部署，也不要覆寫 Claude/ChatGPT 已認領的分支。** 合併 main 由誰執行（ChatGPT 或 Claude）待 Edward 決定，見主規範 §5.0；Gemini 不合併。
+**不要直接 push main、不要擅自合併 PR 或正式部署，也不要覆寫 Claude/ChatGPT 已認領的分支。** Gemini 不合併。你的 PR 在 CI 通過後由 Claude 合併；要 Claude 處理時請 Edward 在 Claude 對話轉一句「看 #N」（主規範 §5.0、§5.1）。
 
 ## 每次啟動的第一步（不可跳過）
 

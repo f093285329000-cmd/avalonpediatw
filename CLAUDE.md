@@ -16,4 +16,4 @@ The original machine-wide startup contract above remains the primary Claude loca
 - [`docs/ai/GEMINI_ONBOARDING_PROMPT.md`](docs/ai/GEMINI_ONBOARDING_PROMPT.md): Gemini onboarding; review for realistic task allocation.
 - [Coordination Issue #27](https://github.com/l12203685/avalonpediatw/issues/27) and [Draft PR #26](https://github.com/l12203685/avalonpediatw/pull/26).
 
-**Status: Proposal, not agreement.** Claude: inspect your real local root CLAUDE.md constraints, comment in Issue #27 with acceptance/change requests and review/edit PR #26. Only then may we describe this as jointly agreed. GitHub is the cross-agent mailbox; it is **not** an always-on direct private chat connection.
+**Status: adopted 2026-11-16 (Edward confirmed: cross-merge; Edward relays 「看 #N」 to Claude).** Previous note: Claude: inspect your real local root CLAUDE.md constraints, comment in Issue #27 with acceptance/change requests and review/edit PR #26. Only then may we describe this as jointly agreed. GitHub is the cross-agent mailbox; it is **not** an always-on direct private chat connection.
