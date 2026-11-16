@@ -14,6 +14,8 @@ import type { AgentAction, AvalonAgent } from './types';
 import { lakeHolderBarred40 } from './BlueRound39';
 import { percivalRead39 } from './BlueRound39Percival';
 import { bayesOptionsOf, bayesRedShare } from './belief/BayesBelief';
+import { AuditAgent } from './invariants/AuditAgent';
+import { goodLakeAvoidSet } from './LakePolicy';
 
 const IDS = Array.from({ length: 10 }, (_, i) => `P${i + 1}`);
 const asObs = (o: object) => o as unknown as PlayerObservation;
@@ -109,6 +111,25 @@ describe('goodLake41, Percival: lakes as a loyal holding the thumb fact (INV-PL2
       }
     }
   });
+  it('the audit exemption (ruling (4)) is set only when the goodLake41 score made the pick, never when a diagnostic bit falls back to the old rule', () => {
+    for (const thumbs of [['P3', 'P4'], ['P1', 'P5'], ['P2', 'P9']]) {
+      for (const [o, lakeIdx] of [[lake1, 0], [lake2, 1]] as const) {
+        const perc = asObs({ ...(o as object), myRole: 'percival', knownWizards: thumbs });
+        for (const bits of [3, 259, 3 | 64, 3 | 128]) {
+          const t = T({ goodLake41: bits });
+          const rec = new AuditAgent('P10', t).pickLakeTargetSeeded(perc, VALID, `pl2-${bits}`);
+          const avoid = goodLakeAvoidSet(perc, t);
+          const own = goodLake41Pick(t, perc, VALID.filter((id) => !avoid.has(id)));
+          if (rec.lakeGuard41) {
+            expect(own).toBe(rec.lakeTarget);
+            expect(percivalRead39(perc)?.unfav).toBe(rec.lakeAsLoyal);
+          }
+          const fallsBack = ((bits & 256) && lakeIdx !== 1) || ((bits & 64) && lakeIdx > 0) || ((bits & 128) && lakeIdx === 0);
+          if (fallsBack) { expect(own).toBeNull(); expect(rec.lakeGuard41 ?? false).toBe(false); }
+        }
+      }
+    }
+  });
 });
 
 describe('merlinKeyApprove42: where Merlin may approve on the team (owner 2026-11-12)', () => {
@@ -133,8 +154,11 @@ describe('merlinKeyApprove42: where Merlin may approve on the team (owner 2026-1
     expect(on(0, { failCount: 1 })).toBe(true);
     // never off the team
     expect(on(15, { proposedTeam: ['P2', 'P4', 'P5', 'P6'] })).toBe(false);
+    // never a team without a red he sees, bit 8 included
+    expect(on(8, { proposedTeam: ['P2', 'P3', 'P4', 'P6'] })).toBe(false);
+    expect(on(0, { proposedTeam: ['P2', 'P3', 'P4', 'P6'] })).toBe(false);
   });
-  it('self-play: Merlin never approves a team he is not on that holds a red he sees, from round 3 (non-forced), with every Merlin vote knob on', async () => {
+  it('self-play: Merlin never approves a team he is not on that holds a red he sees, in any round (non-forced), with every Merlin vote knob on', async () => {
     const tuning = {
       ...DEFAULT_AGENT_TUNING, beliefPendingProposal: true, vote40KeyOnL: 0.6, vote40KeyOnP: 0.6, vote40KeyOnM: 0.6, vote40R5OnL: 0.5, vote40R5OnP: 0.5,
       vote40R5OffL: 0.95, vote40R5OffP: 0.95, vote40R5OffM: 0.95, merlinKeyApprove41: 1, merlinKeyApprove42: 8,
@@ -149,7 +173,7 @@ describe('merlinKeyApprove42: where Merlin may approve on the team (owner 2026-1
       onGameStart(obs: PlayerObservation): void { this.fwd.onGameStart(obs); }
       act(obs: PlayerObservation): AgentAction {
         const a = this.fwd.act(obs);
-        if (obs.myRole === 'merlin' && a.type === 'team_vote' && (obs.currentRound ?? 1) >= 3 && (obs.failCount ?? 0) < 4) {
+        if (obs.myRole === 'merlin' && a.type === 'team_vote' && (obs.failCount ?? 0) < 4) {
           const team = obs.proposedTeam ?? [];
           const seen = team.some((id) => obs.knownEvils.includes(id));
           if (seen && !team.includes(obs.myPlayerId)) { offSeen++; if (a.vote) offSeenApprove++; }
@@ -163,7 +187,7 @@ describe('merlinKeyApprove42: where Merlin may approve on the team (owner 2026-1
     }
     const engine = new SelfPlayEngine();
     for (let g = 0; g < 80; g++) await engine.runGame(Array.from({ length: 10 }, (_, i) => new Probe(`H-${i + 1}`)), false);
-    process.stdout.write(`merlin R3+ votes: off-team seen-red ${offSeen} (approve ${offSeenApprove}), on-team seen-red approve ${onSeenApprove}\n`);
+    process.stdout.write(`merlin votes (R1-R5, non-forced): off-team seen-red ${offSeen} (approve ${offSeenApprove}), on-team seen-red approve ${onSeenApprove}\n`);
     expect(offSeen).toBeGreaterThan(0);
     expect(offSeenApprove).toBe(0);
     expect(onSeenApprove).toBeGreaterThan(0);

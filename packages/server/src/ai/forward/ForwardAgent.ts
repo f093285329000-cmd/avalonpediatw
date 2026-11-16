@@ -1028,13 +1028,15 @@ export class ForwardAgent implements AvalonAgent {
         const onTeam = team.includes(obs.myPlayerId);
         // 外白（不在隊上贊成）一個有看得到紅的隊 = 異常票外白：不做（INV-M1）；也不越過好人投票關卡（INV-V1）。
         const seenRed = team.some((id) => obs.knownEvils.includes(id));
-        // Round 41 `merlinKeyApprove41` (measured only; owner item, 10/30 ruling): on the team in a key round, at rate q the loyal-view approve
-        // stands even though his seen reds could lose on the spot (human Merlins approve 41% there); the public must-fail gate still binds.
+        // Round 41 `merlinKeyApprove41` (owner 2026-11-12: on the team he may approve now and then, never off the team): on the team in a key
+        // round with a red he sees on it, at rate q the loyal-view approve stands even though his seen reds could lose on the spot (human Merlins
+        // approve about 40% in that cell: 770 votes 40% in round 41, 761 votes 39% in round 42); the public must-fail gate still binds.
         // Merlin's own sight makes the team must-fail (his seen reds); like his on-team normal white (owner 2026-10-30) only the public must-fail
         // gate and the dominance gate bind.
         const keyApprove = onTeam && merlinKeyApprove41Now(this.baseline.tuning, obs) && goodVoteGate(obs, { ...this.gates, mustFail: false }) === null
           && goodVoteGate(loyalViewOf(obs), this.gates) === null;
-        // Round 42 `merlinKeyApprove42` bit 8: the key approve does not need the loyal view's approve (still on the team only).
+        // Round 42 `merlinKeyApprove42` bit 8: the key approve does not need the loyal view's approve (still on the team only, and only a team
+        // holding a red he sees: merlinKeyApprove41Now checks that).
         const keyAlone = keyApprove && ((this.baseline.tuning.merlinKeyApprove42 ?? 0) & 8) !== 0;
         // Owner 2026-11-12: on the team he may approve now and then (場內偶爾投白); off the team never a team holding a red he sees (不能開外白).
         const vote = (asLoyal.action.vote || keyAlone) && (!merlinVoteFatal(obs, this.baseline.tuning) || keyApprove)

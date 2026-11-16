@@ -180,9 +180,9 @@ export function goodLake41Pick(
   return pick;
 }
 
-// ── 梅林在紅方已兩勝、自己在隊上、隊上有他看得到的紅時（`merlinKeyApprove41`，只量；牽涉 10/30 裁定，專案負責人待裁定）─────────
+// ── 梅林在紅方已兩勝、自己在隊上、隊上有他看得到的紅時（`merlinKeyApprove41`；專案負責人 11/12 裁定：場內可以偶爾投白，不能開外白）─────────
 /**
- * 真人梅林在這一格（第 3–4 局、紅方已兩勝、在隊上、隊上的紅夠讓任務失敗；非強制、不是自己當隊長）贊成 40%（770 票；強者 40%，83 票），
+ * 真人梅林在這一格（第 3–4 局、紅方已兩勝、在隊上、隊上的紅夠讓任務失敗；非強制、不是自己當隊長）贊成約 40%（第 41 回合 770 票 40%，第 42 回合 761 票 39%；強者 40%，83 票），
  * 忠臣同一格 65%；機器人梅林幾乎都反對（自我對打約 85% 反對），忠臣照真人變寬時兩者的差被凍結的刺客讀到（第 40 回合）。
  * 這裡讓梅林在「他這個座位的忠臣公開視角會贊成」時，以比例 q 贊成（每一票用座位、局、第幾次提議、提議的隊、提議次數與任務結果算出固定的雜湊，
  * 不用 Math.random，重播與自我對打都一樣，而且不同的局會不一樣）；公開邏輯證明一定會失敗的隊照舊反對（呼叫端的投票關卡）。0 = 關。
@@ -194,6 +194,8 @@ export function merlinKeyApprove41Now(tuning: Readonly<AgentTuning>, obs: Player
   if (round < 3 || round > 4 || (obs.failCount ?? 0) >= 4) return false;
   if ((obs.questResults ?? []).filter((r) => r === 'fail').length < 2) return false;
   if (!(obs.proposedTeam ?? []).includes(obs.myPlayerId) || obs.currentLeader === obs.myPlayerId) return false;
+  // 只給隊上有他看得到的紅的隊（第 42 回合審查：位元 8 不需要忠臣視角也贊成時，原本沒有這一項會連沒有看得到的紅的隊也照比例贊成）。
+  if (!(obs.proposedTeam ?? []).some((id) => obs.knownEvils.includes(id))) return false;
   // 第 42 回合 `merlinKeyApprove42`：只在真人梅林贊成比較多的格子（真人：第 3 局 44%、第 4 局 15%；隊上一個看得到的紅 45%、兩個 25%；
   // 第 3 局、一個看得到的紅、這一局第 1 次提議 55%）。
   const cond = tuning.merlinKeyApprove42 ?? 0;
