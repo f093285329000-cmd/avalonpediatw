@@ -97,10 +97,12 @@
 
 ## 正式百科 JSON 與 SOP 對照
 
+- [本站 40 筆 wiki-XXX 實際條目索引](ALL_ARTICLES.generated.md)（已直接解析當下 `wiki_data.json`）。
+
 - [網站原始 wiki_data.json](https://github.com/l12203685/avalonpediatw/blob/main/packages/server/wiki_data.json) 含不在 Markdown 鏡像內的條目。wiki-XXX 是網站條目內部 ID，不可推測對外網址。
 - [180 條 AI ↔ 百科 SOP 對照](https://github.com/l12203685/avalonpediatw/blob/main/docs/ai/wiki_sop_map.md)：2026-10-29 盤點 42 已、70 部分、52 未、16 衝突，需隨正式碼更新。
 - 常用 ID：wiki-203 規則、wiki-147 湖中、wiki-175 梅林、wiki-176 派西、wiki-177 紅方策略，原始內容仍在網站 JSON 中維護。
 
 ## 設計原則
 
-本資料夾不複製現有百科正文，而是建立文獻與百科索引、中文精華、論證前提、反例與 AI 對照；避免兩套原文各自漂移。全量 wiki-XXX 應日後從 JSON 自動產生，而非手動猜測。
+本資料夾不複製現有百科正文，而是建立文獻與百科索引、中文精華、論證前提、反例與 AI 對照；避免兩套原文各自漂移。已新增 [40 筆全量網站條目快照](ALL_ARTICLES.generated.md)，由正式 JSON 實際讀取生成；它是一次性快照，未配置排程自動更新，原文修改後仍應重新生成。
