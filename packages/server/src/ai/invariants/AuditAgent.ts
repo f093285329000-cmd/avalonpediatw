@@ -23,6 +23,8 @@ import { ForwardAgent } from '../forward/ForwardAgent';
 import { withSeededRandom } from '../benchmark/agreement';
 import type { AgentTuning } from '../AgentTuning';
 import { goodLakeAvoidSet } from '../LakePolicy';
+import { goodLake41On, goodLake41Pick } from '../BlueRound41';
+import { percivalRead39 } from '../BlueRound39Percival';
 import type { AgentAction, AvalonAgent, PlayerObservation } from '../types';
 
 export type DecisionKind = 'team_select' | 'team_vote' | 'quest_vote' | 'assassinate' | 'lake_target' | 'lake_claim';
@@ -49,6 +51,11 @@ export interface DecisionRecord {
    * red" constraint) — INV-PL2, the behavioural check of the blue lake.
    */
   lakeAsLoyal?: string;
+  /**
+   * lake_target, Percival under `goodLake41`: the loyal clone picked the thumb Percival's read gives as Morgana at confidence >= 0.7, which
+   * Percival skips by the owner's 11/11 ruling (4) (narrows the 10/14 set by that one seat) — INV-PL2 exemption.
+   */
+  lakeGuard41?: boolean;
   /** lake_claim: the public claim (`null` = no declaration). */
   lakeClaim?: 'good' | 'evil' | null;
   /** lake_claim: the target's real camp (what the holder saw). */
@@ -145,6 +152,21 @@ export class AuditAgent implements AvalonAgent {
     if (obs.myRole === 'percival') {
       const asLoyal: PlayerObservation = { ...obs, myRole: 'loyal' };
       rec.lakeAsLoyal = withSeededRandom(seed, () => this.base.pickLakeTarget(asLoyal, validTargets));
+      if (goodLake41On(this.base.tuning, obs) && rec.lakeAsLoyal !== target && validTargets) {
+        // 裁定 (4) 的豁免只給 goodLake41 的湖中分數真的做了這個決定的時候（診斷位元 32/64/128/256 退回舊規則時不給），
+        // 而且派西湖的人要等於忠臣分身拿掉這根莫甘娜之後的選擇。
+        const rd = percivalRead39(obs);
+        const tuning = this.base.tuning;
+        const avoid = goodLakeAvoidSet(obs, tuning);
+        const own = goodLake41Pick(tuning, obs, validTargets.filter((id) => !avoid.has(id)));
+        let guard = !!rd?.unfav && rd.conf >= 0.7 && rd.unfav === rec.lakeAsLoyal && own !== null && own === target;
+        if (guard && rd?.unfav) {
+          const rest = validTargets.filter((id) => id !== rd.unfav);
+          const next = rest.length > 0 ? withSeededRandom(seed, () => this.base.pickLakeTarget(asLoyal, rest)) : undefined;
+          guard = next === target;
+        }
+        rec.lakeGuard41 = guard;
+      }
     }
     this.records.push(rec);
     return rec;

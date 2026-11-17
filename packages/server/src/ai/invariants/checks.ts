@@ -524,7 +524,8 @@ export function checkDecision(
       // INV-PL2 (2026-10-26 review, behavioural): Percival lakes the seat a
       // loyal holding the thumb constraint would lake (same draws).
       if (rec.lakeAsLoyal !== undefined && rec.lakeTarget !== undefined) {
-        L.record('INV-PL2', { violated: rec.lakeAsLoyal !== rec.lakeTarget });
+        if (rec.lakeGuard41 === true) L.record('INV-PL2', { exempt: 'Percival skips the read-confident Morgana (owner 11/11 ruling (4), goodLake41)' });
+        else L.record('INV-PL2', { violated: rec.lakeAsLoyal !== rec.lakeTarget });
       }
       break;
     }

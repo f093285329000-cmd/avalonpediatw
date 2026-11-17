@@ -3,7 +3,7 @@
  *
  * 藍方持湖的規則（`goodLake41`），照「湖中女神：該湖誰」的報告第 (3) 節，加上專案負責人之後的更正：
  *   湖中分數 = 資訊量 ＋ 權重 × 對方是好人的機率。資訊量 = h(P(紅))（湖完之後持湖者對這個人少了多少不確定；一半一半時是 1），
- *   P(紅) 是持湖者自己的後驗（派西含拇指的限制；梅林用忠臣看得到的公開視角排序，見下）。
+ *   P(紅) 是持湖者自己的後驗（派西用帶著「兩根拇指剛好一根是紅」的忠臣視角，第 42 回合修正、和不變量 INV-PL2 一致；梅林用忠臣看得到的公開視角排序，見下）。
  *   權重：紅方未兩勝、後面還有湖 = 2；紅方已兩勝（含最後一湖）= 0，只看資訊（11/12 更正：紅方聽牌時第三局過了就有四個確定的好人，
  *   湖的價值在資訊，不在把湖留在藍方）。紅方已兩勝時「只看資訊」有兩種做法（`goodLake41` 的低兩位）：1 = 最不確定的人（h 最大）、
  *   2 = 最可能是紅的人（推演在第 1 湖 FF 偏向這一種）、3 = 第 1 湖最可能是紅、第 2、3 湖最不確定（推演在第 2 湖偏向最不確定）。
@@ -22,7 +22,7 @@
  * 再挑被別人的提議選進隊伍比較多次的人（被越多人選的人越可能是好人），再挑在提議紀錄裡比較早出現的人；都一樣才照座位序（並計數，應該幾乎不會發生）。
  * 梅林（11/11 晚、lp39 LH-12）：先用忠臣看得到的公開範圍（他看得到的紅已被拿掉，除非只剩他們），範圍內用忠臣的公開視角排序，
  * 不讓刺客從湖法看出梅林；位元 16 = 改用梅林自己的後驗排序（只量）。
- * 診斷用的位元（只量）：32 = 第 1 湖 FS 照原本的規則；64 = 只用在第 1 湖；128 = 只用在第 2、3 湖。
+ * 診斷用的位元（只量）：32 = 第 1 湖 FS 照原本的規則；64 = 只用在第 1 湖；128 = 只用在第 2、3 湖；256 = 只用在第 2 湖（第 42 回合）。
  */
 import type { PlayerObservation } from './types';
 import type { AgentTuning } from './AgentTuning';
@@ -121,6 +121,7 @@ export function goodLake41Pick(
   if ((bits & 32) && st.lake === 0 && st.score === 'FS') return null;
   if ((bits & 64) && st.lake > 0) return null;
   if ((bits & 128) && st.lake === 0) return null;
+  if ((bits & 256) && st.lake !== 1) return null;
   const keep = (xs: Lake39Candidate[], f: (c: Lake39Candidate) => boolean): Lake39Candidate[] => {
     const k = xs.filter(f);
     return k.length > 0 ? k : xs;
@@ -135,9 +136,11 @@ export function goodLake41Pick(
   }
   // 梅林：公開視角（範圍與排序）；位元 16 = 用自己的後驗排序。
   const merlinPublic = obs.myRole === 'merlin' && (bits & 16) === 0;
+  // 派西（第 42 回合修正，不變量 INV-PL2／10/14 D4）：範圍與排序用「帶著派西內建事實（兩根拇指剛好一根是紅）的忠臣」的視角，
+  // 和不變量比的是同一個人；派西自己的其他讀法（拇指的角色、第 1 局莫甘娜等）不進湖的排序。只有上面裁定 (4) 的莫甘娜例外。
   const view: PlayerObservation = merlinPublic
     ? { ...obs, myRole: 'loyal', knownEvils: [], knownWizards: undefined, allEvilIds: undefined, publicLoyalView: true }
-    : obs;
+    : obs.myRole === 'percival' ? { ...obs, myRole: 'loyal' } : obs;
   // 自己之前湖的結果留著（忠臣坐在這個座位也知道；照規則湖過的人不能再拿湖，所以持湖時這一項其實一定是空的）。
   let cs = lake39Candidates(view, ids, tuning);
   if (st.lake <= 1) cs = keep(cs, (c) => c.cls !== 'F2');
@@ -177,9 +180,9 @@ export function goodLake41Pick(
   return pick;
 }
 
-// ── 梅林在紅方已兩勝、自己在隊上、隊上有他看得到的紅時（`merlinKeyApprove41`，只量；牽涉 10/30 裁定，專案負責人待裁定）─────────
+// ── 梅林在紅方已兩勝、自己在隊上、隊上有他看得到的紅時（`merlinKeyApprove41`；專案負責人 11/12 裁定：場內可以偶爾投白，不能開外白）─────────
 /**
- * 真人梅林在這一格（第 3–4 局、紅方已兩勝、在隊上、隊上的紅夠讓任務失敗；非強制、不是自己當隊長）贊成 40%（770 票；強者 40%，83 票），
+ * 真人梅林在這一格（第 3–4 局、紅方已兩勝、在隊上、隊上的紅夠讓任務失敗；非強制、不是自己當隊長）贊成約 40%（第 41 回合 770 票 40%，第 42 回合 761 票 39%；強者 40%，83 票），
  * 忠臣同一格 65%；機器人梅林幾乎都反對（自我對打約 85% 反對），忠臣照真人變寬時兩者的差被凍結的刺客讀到（第 40 回合）。
  * 這裡讓梅林在「他這個座位的忠臣公開視角會贊成」時，以比例 q 贊成（每一票用座位、局、第幾次提議、提議的隊、提議次數與任務結果算出固定的雜湊，
  * 不用 Math.random，重播與自我對打都一樣，而且不同的局會不一樣）；公開邏輯證明一定會失敗的隊照舊反對（呼叫端的投票關卡）。0 = 關。
@@ -191,6 +194,14 @@ export function merlinKeyApprove41Now(tuning: Readonly<AgentTuning>, obs: Player
   if (round < 3 || round > 4 || (obs.failCount ?? 0) >= 4) return false;
   if ((obs.questResults ?? []).filter((r) => r === 'fail').length < 2) return false;
   if (!(obs.proposedTeam ?? []).includes(obs.myPlayerId) || obs.currentLeader === obs.myPlayerId) return false;
+  // 只給隊上有他看得到的紅的隊（第 42 回合審查：位元 8 不需要忠臣視角也贊成時，原本沒有這一項會連沒有看得到的紅的隊也照比例贊成）。
+  if (!(obs.proposedTeam ?? []).some((id) => obs.knownEvils.includes(id))) return false;
+  // 第 42 回合 `merlinKeyApprove42`：只在真人梅林贊成比較多的格子（真人：第 3 局 44%、第 4 局 15%；隊上一個看得到的紅 45%、兩個 25%；
+  // 第 3 局、一個看得到的紅、這一局第 1 次提議 55%）。
+  const cond = tuning.merlinKeyApprove42 ?? 0;
+  if ((cond & 1) && round !== 3) return false;
+  if ((cond & 2) && (obs.proposedTeam ?? []).filter((id) => obs.knownEvils.includes(id)).length !== 1) return false;
+  if ((cond & 4) && (obs.failCount ?? 0) !== 0) return false;
   // 雜湊鍵放進每一局都不一樣的公開狀態（提議的隊、到目前的提議次數、任務結果），不然同一個座位、同一局、同一次提議在每一局都是同一個答案。
   const team = [...(obs.proposedTeam ?? [])].sort().join(',');
   const key = `${obs.myPlayerId}|${round}|${obs.failCount ?? 0}|${team}|${(obs.voteHistory ?? []).length}|${(obs.questResults ?? []).join('')}|key41`;
