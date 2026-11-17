@@ -13,7 +13,7 @@ import { eventLines } from '../simulation/replies';
 import { FAILS_REQUIRED, TEAM_SIZES, type PublicEvent } from '../simulation/scenario';
 import { seatChar } from '../simulation/seats';
 import type { PickView } from './draft';
-import { themeOf } from './plan';
+import { labelFor } from './plan';
 
 const W = 1080;
 const C = {
@@ -96,7 +96,6 @@ function missionBoxes(shown: readonly PublicEvent[], y: number): string {
 
 /** 題目圖的 SVG（weekday = 今天的星期，決定標題）。 */
 export function buildPuzzleSvg(pv: PickView, weekday: number): string {
-  const theme = themeOf(weekday);
   const role = pv.game.seatRoles[pv.pick.seat - 1];
   const parts: string[] = [];
   let y = 0;
@@ -104,7 +103,7 @@ export function buildPuzzleSvg(pv: PickView, weekday: number): string {
   // 標題列
   parts.push(`<rect x="0" y="0" width="${W}" height="150" fill="${C.header}"/>`);
   parts.push(text(40, 64, '阿瓦隆每日一題', { size: 40, fill: C.headerInk, weight: true }));
-  parts.push(text(40, 118, theme.label, { size: 32, fill: '#c9d4ea' }));
+  parts.push(text(40, 118, labelFor(weekday, pv.pick), { size: 32, fill: '#c9d4ea' }));
   parts.push(text(W - 40, 118, pv.exerciseId, { size: 28, fill: '#c9d4ea', anchor: 'end' }));
   y = 150;
 

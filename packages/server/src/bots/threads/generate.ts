@@ -7,7 +7,7 @@
 
 import type { SimGame } from '../simulation/scenario';
 import { buildDraft, pickView, type PickView, type ThreadsDraft } from './draft';
-import { addDays, buildCandidates, continuationOf, pickForDate, themeOf, weekdayOf, type ThreadsBank, type ThreadsPick } from './plan';
+import { THREADS_START_DATE, addDays, aloneFor, dayNumber, buildCandidates, continuationOf, pickForDate, themeOf, weekdayOf, type ThreadsBank, type ThreadsPick } from './plan';
 
 export interface GenerateBank extends ThreadsBank {
   byId: ReadonlyMap<string, number>;
@@ -19,6 +19,8 @@ export interface GenerateDeps {
   titles: ReadonlyMap<string, string>;
   /** 存下來的草稿（沒有就 null）。 */
   readSaved: (date: string) => ThreadsDraft | null;
+  /** 第一篇貼文的日期（預設 THREADS_START_DATE）：這一天沒有昨天的答案，之前的日子不產生。 */
+  startDate?: string;
 }
 
 export class ThreadsGenerator {
@@ -47,12 +49,15 @@ export class ThreadsGenerator {
     if (saved?.pick && this.gameOf(saved.pick.gameId)) pick = saved.pick;
     if (!pick) {
       const theme = themeOf(weekdayOf(date));
+      let prev: ThreadsPick | null = null;
       if (theme.continues && theme.round !== undefined) {
-        const prev = this.pickFor(addDays(date, -1));
+        prev = this.pickFor(addDays(date, -1));
         const prevGame = prev && prev.kind === 'tail' ? this.gameOf(prev.gameId) : null;
         if (prevGame) pick = continuationOf(prevGame.game, theme.round);
       }
       if (!pick) pick = pickForDate(this.deps.bank, date, this.candidates);
+      // 計畫裡延續的是另一局（前一天實際貼的不是計畫那一局）：改出獨立的題目。
+      if (pick?.continues && prev && pick.gameId !== prev.gameId) pick = aloneFor(this.deps.bank, date, this.candidates);
     }
     this.picks.set(date, pick);
     return pick;
@@ -70,10 +75,12 @@ export class ThreadsGenerator {
     if (!pick || !today) return null;
 
     const yDate = addDays(date, -1);
-    const yPick = this.pickFor(yDate);
+    // 第一天（和之前）沒有昨天的貼文：A 只有今天的題目。
+    const first = dayNumber(date) <= dayNumber(this.deps.startDate ?? THREADS_START_DATE);
+    const yPick = first ? null : this.pickFor(yDate);
     const yView = yPick ? this.viewOf(yPick) : null;
     let earlier: PickView | undefined;
-    if (yPick?.continues) {
+    if (yPick?.continues && dayNumber(yDate) > dayNumber(this.deps.startDate ?? THREADS_START_DATE)) {
       const ePick = this.pickFor(addDays(date, -2));
       if (ePick && ePick.gameId === yPick.gameId) earlier = this.viewOf(ePick) ?? undefined;
     }

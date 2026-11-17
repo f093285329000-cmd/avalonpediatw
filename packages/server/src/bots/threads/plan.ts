@@ -4,7 +4,7 @@
  * Edward 2026-11-11 的每週主題（edward_rulings；模擬瓦的 `/模擬 今天` 用同一套）：
  *   週一 刺殺梅林＋公布週日那局；週二 派西維爾思考＋公布週一的梅林；週三 1-5 尾派＋公布週二的派西；
  *   週四 公布週三的答案，題目延續同一局：3-5 尾派（所以週三選「第二局開紅、輪得到 3-5 尾派」的局）；
- *   週五 2-5 尾派＋公布週四那局的完整牌譜；週六 同一局接到 4-5（沒有這種局就各出一題）；
+ *   週五 2-5 尾派＋公布週四那局的完整牌譜；週六 同一局接到 4-5（Issue #37：局數不夠時改成第四局忠臣派 5 人）；
  *   週日 第五局決策＋公布週六那局。
  * Edward 11/16：「模擬畢竟只是模擬」——題目只從實戰出：題庫 sim_bank.json 建的時候就把模擬的局拿掉了
  * （scripts/buildSimBank.ts），網站牌譜的連結也跳過模擬的貼文（recordsIndex.isSimulatedPost）。
@@ -23,7 +23,7 @@ import {
 } from '../simulation/scenario';
 
 /** 一週七天的主題（0 = 週日，台北日期）。 */
-export type ThreadsKind = 'assassin' | 'percival' | 'tail' | 'final';
+export type ThreadsKind = 'assassin' | 'percival' | 'tail' | 'final' | 'round4';
 
 export interface ThreadsTheme {
   weekday: number;
@@ -48,6 +48,19 @@ export const THREADS_THEMES: readonly ThreadsTheme[] = [
 
 export function themeOf(weekday: number): ThreadsTheme {
   return THREADS_THEMES[((weekday % 7) + 7) % 7];
+}
+
+/** 週六沒有能連著的 2-5＋4-5 時的題目（Issue #37「局數不夠時改成第四局忠臣派 5 人」）。 */
+export const ROUND4_LOYAL_LABEL = '週六・第四局忠臣派 5 人';
+/** 週四沒有能連著的 1-5＋3-5 時：獨立的 3-5。 */
+export const THU_ALONE_LABEL = '週四・3-5 尾派';
+
+/** 這一天這一題的標題：延續的日子沒有延續時改用獨立的標題。 */
+export function labelFor(weekday: number, pick: Pick<ThreadsPick, 'kind' | 'round' | 'continues'>): string {
+  if (pick.kind === 'round4') return ROUND4_LOYAL_LABEL;
+  const theme = themeOf(weekday);
+  if (theme.continues && !pick.continues && theme.round === 3) return THU_ALONE_LABEL;
+  return theme.label;
 }
 
 /** 一天的題目：哪一局、哪一個決定（刺殺題沒有派票決定）、誰的視角。 */
@@ -103,6 +116,12 @@ export const THREADS_EPOCH_MONDAY = '2026-11-16';
 export function weekIndexOf(date: string): number {
   return Math.floor((dayNumber(date) - dayNumber(THREADS_EPOCH_MONDAY)) / 7);
 }
+
+/**
+ * 第一篇貼文的日期（站長 2026-11-17 貼出第一題 36AKW-2-5）：這一天的 A 沒有昨天的答案，
+ * 之前的日子不算（不會出現在任何 A 的「昨天的答案」裡）。
+ */
+export const THREADS_START_DATE = '2026-11-17';
 
 /** 今天的台北日期。 */
 export function taipeiToday(now: number = Date.now()): string {
@@ -186,8 +205,9 @@ export function buildCandidates(bank: ThreadsBank): Record<'assassin' | 'perciva
     const t4 = tailPick(g, 4, true);
     if (t2 && t4) add('friSat', [t2, t4], [t2.seat, t4.seat]);
     if (t2) add('fri', [t2], [t2.seat]);
-    const t4alone = tailPick(g, 4);
-    if (t4alone) add('sat', [t4alone], [t4alone.seat]);
+    // 週六的備案：第 4 局忠臣當隊長的第一次派票（5 人）。
+    const r4 = g.proposals.find((p) => p.round === 4 && roleAt(g, p.leaderSeat) === 'loyal');
+    if (r4) add('sat', [{ kind: 'round4', gameId: g.id, proposal: r4.globalIndex, seat: r4.leaderSeat, round: 4 }], [r4.leaderSeat]);
 
     // 第 5 局：藍方隊長的第一次派票（偏好藍方視角；沒有就第一次）。
     const r5 = g.proposals.filter((p) => p.round === 5);
@@ -218,7 +238,7 @@ export const THREADS_PLAN_SALT = 'threads-v1';
 
 /**
  * 一週（週一到週日）的計畫：index 0 = 週一 … 6 = 週日；選不到的那天是 null。
- * 週三＋週四、週五＋週六優先選同一局連著的；沒有就各選一題（週四改出獨立的 3-5、週六改出獨立的 4-5）。
+ * 週三＋週四、週五＋週六優先選同一局連著的；沒有就各選一題（週四改出獨立的 3-5、週六改出第四局忠臣派 5 人）。
  */
 export function planWeek(bank: ThreadsBank, week: number, candidates = buildCandidates(bank)): (ThreadsPick | null)[] {
   const used = new Set<string>();
@@ -245,6 +265,14 @@ export function planWeek(bank: ThreadsBank, week: number, candidates = buildCand
  */
 export function continuationOf(game: SimGame, round: number): ThreadsPick | null {
   return tailPick(game, round, true);
+}
+
+/** 週四／週六不延續時的獨立題（週四 3-5、週六第四局忠臣派 5 人），跟計畫用同一套排法。 */
+export function aloneFor(bank: ThreadsBank, date: string, candidates = buildCandidates(bank)): ThreadsPick | null {
+  const wd = weekdayOf(date);
+  const pool = wd === 4 ? 'thu' : wd === 6 ? 'sat' : null;
+  if (!pool) return null;
+  return pickFrom(candidates[pool], weekIndexOf(date), `${THREADS_PLAN_SALT}:${pool}`, new Set())?.[0] ?? null;
 }
 
 /** 某一天的題目（照計畫）。 */

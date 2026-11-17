@@ -4,7 +4,8 @@
  *   pnpm --filter @avalon/server threads:draft                       # 今天（台北日期）
  *   pnpm --filter @avalon/server threads:draft -- --date 2026-11-18
  *   pnpm --filter @avalon/server threads:draft -- --week             # 從 --date（預設今天）起連續 7 天
- *   選項：--out <資料夾>（預設 packages/server/threads_drafts/，不進 git）、--no-image、--days N
+ *   選項：--out <資料夾>（預設 packages/server/threads_drafts/，不進 git）、--no-image、--days N、
+ *         --start YYYY-MM-DD（第一篇貼文的日期，預設 2026-11-17：那一天的 A 沒有昨天的答案）
  *
  * 每天寫三個檔：<日期>.md（複製貼上用）、<日期>.json（題號、ChatGPT 的留言欄位）、<日期>.png（題目圖）。
  * 已經有 <日期>.json 的日子沿用裡面的題目和第一則留言（重跑不會換題）。
@@ -18,7 +19,7 @@ import { readRecordPosts } from '../src/bots/simulation/recordsIndex';
 import { draftMarkdown, type ThreadsDraft } from '../src/bots/threads/draft';
 import { ThreadsGenerator } from '../src/bots/threads/generate';
 import { renderPuzzlePng } from '../src/bots/threads/image';
-import { addDays, taipeiToday, weekdayOf } from '../src/bots/threads/plan';
+import { THREADS_START_DATE, addDays, taipeiToday, weekdayOf } from '../src/bots/threads/plan';
 
 const root = path.resolve(__dirname, '..');
 const argv = process.argv.slice(2);
@@ -32,6 +33,7 @@ const start = arg('--date', taipeiToday());
 const days = flag('--week') ? 7 : Number(arg('--days', '1'));
 const outDir = path.resolve(arg('--out', path.join(root, 'threads_drafts')));
 const withImage = !flag('--no-image');
+const startDate = arg('--start', THREADS_START_DATE);
 
 const bankFile = readSimBankFile([path.join(root, 'sim_bank.json')]);
 if (!bankFile) {
@@ -54,7 +56,7 @@ const readSaved = (date: string): ThreadsDraft | null => {
   }
 };
 
-const gen = new ThreadsGenerator({ bank, titles, readSaved });
+const gen = new ThreadsGenerator({ bank, titles, readSaved, startDate });
 console.log(`bank: ${bank.games.length} games (${bank.records.size} with a records page); out: ${outDir}`);
 
 for (let i = 0; i < days; i++) {
@@ -77,5 +79,5 @@ for (let i = 0; i < days; i++) {
   }
   fs.writeFileSync(path.join(outDir, `${date}.json`), `${JSON.stringify(draft, null, 2)}\n`);
   fs.writeFileSync(path.join(outDir, `${date}.md`), draftMarkdown(draft));
-  console.log(`${date} ${draft.theme} ${draft.exerciseId} post ${draft.post.chars} chars${draft.replyToYesterday ? `, reply ${draft.replyToYesterday.chars} chars` : ''}${draft.recordId ? '' : ' (no records page)'}`);
+  console.log(`${date} ${draft.theme} ${draft.exerciseId} post ${draft.post.chars} chars${draft.answerToYesterday ? `, with ${draft.answerToYesterday.exerciseId} answer` : ''}${draft.recordId ? '' : ' (no records page)'}`);
 }
