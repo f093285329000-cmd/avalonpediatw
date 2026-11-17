@@ -119,7 +119,7 @@ describe('draft texts', () => {
       expect(d.post.text).toContain(d.exerciseId);
       expect(d.post.text).toContain(themeOf(weekdayOf(date)).label);
     }
-  });
+  }, 60_000); // 8 週 56 天的草稿：單獨跑不到 1 秒，整套測試平行跑時 CI 上超過預設的 5 秒
 
   it('the day after a continued puzzle reveals nothing; the day after that reveals both answers', () => {
     const [, , wed, thu] = week(0);
