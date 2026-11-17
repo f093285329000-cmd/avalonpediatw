@@ -13,7 +13,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { buildSimBank, readSimBankFile, type SimBank } from '../bots/simulation/bank';
 import { readRecordPosts } from '../bots/simulation/recordsIndex';
 import { midDecision } from '../bots/simulation/scenario';
-import { THREADS_ARTICLES, THREADS_MAX_CHARS, answerText, buildDraft, draftMarkdown, pickView, postText, type ThreadsDraft } from '../bots/threads/draft';
+import { THREADS_ARTICLES, THREADS_MAX_CHARS, THREADS_TOPIC_TAG, answerText, buildDraft, draftMarkdown, pickView, postText, type ThreadsDraft } from '../bots/threads/draft';
 import { ThreadsGenerator } from '../bots/threads/generate';
 import { buildPuzzleSvg, renderPuzzlePng, textWidth, wrapLine } from '../bots/threads/image';
 import { addDays, buildCandidates, planWeek, themeOf, weekIndexOf, weekdayOf, type ThreadsPick } from '../bots/threads/plan';
@@ -110,6 +110,7 @@ describe('draft texts', () => {
       const date = addDays('2026-11-16', i);
       const d = gen.draftFor(date) as ThreadsDraft;
       expect(d.post.chars).toBeLessThanOrEqual(THREADS_MAX_CHARS);
+      expect(d.post.text.split('\n').at(-1)).toBe(THREADS_TOPIC_TAG);
       expect([...d.post.text].length).toBe(d.post.chars);
       expect(d.replyToYesterday?.chars ?? 0).toBeLessThanOrEqual(THREADS_MAX_CHARS);
       for (const t of [d.post.text, d.replyToYesterday?.text ?? '']) {

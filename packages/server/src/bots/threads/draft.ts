@@ -24,6 +24,8 @@ import { exerciseIdOfPick, themeOf, weekdayOf, type ThreadsKind, type ThreadsPic
 
 /** Threads 一則貼文的字數上限。 */
 export const THREADS_MAX_CHARS = 500;
+/** 每篇新貼文最後一行的主題標籤（Edward 2026-11-17「加 #阿瓦隆」）。 */
+export const THREADS_TOPIC_TAG = '#阿瓦隆';
 
 /** 每個主題建議的百科文章（第一則留言附網址；ChatGPT 可以換）。id 對 wiki_data.json。 */
 export const THREADS_ARTICLES: Readonly<Record<string, readonly string[]>> = {
@@ -107,7 +109,7 @@ export function postText(pv: PickView, opts: { weekday: number; continuesFrom?: 
     ...(opts.continuesFrom ? [continuesLine(opts.continuesFrom, pv.pick.seat)] : []),
     identityLine(pv.pick.seat, role, pv.view.sight),
   ];
-  const tail = [decisionWords(pv.game, pv.pick), answerHint(pv.pick.kind), `題號 ${pv.exerciseId}｜實戰牌譜，記號看圖或〈牌譜記錄格式與常用術語〉`];
+  const tail = [decisionWords(pv.game, pv.pick), answerHint(pv.pick.kind), `題號 ${pv.exerciseId}｜實戰牌譜，記號看圖或〈牌譜記錄格式與常用術語〉`, THREADS_TOPIC_TAG];
   const noPrior = !pv.shown.some((e) => e.kind === 'proposal');
   const variants: string[][] = noPrior
     ? [['第 1 局第一個隊長，前面沒有派票']]
