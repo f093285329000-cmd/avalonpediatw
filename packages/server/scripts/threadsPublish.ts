@@ -5,6 +5,8 @@
  *   tsx scripts/threadsPublish.ts post    --out <輸出> --state-dir <...>          # 要 THREADS_ACCESS_TOKEN；圖的網址放 IMAGE_URL
  *   tsx scripts/threadsPublish.ts record-manual --date 2026-11-17 --state-dir <...> [--post-id <id>]
  *   tsx scripts/threadsPublish.ts token --token-out <檔案> [--force]                 # 權杖快到期就續期
+ *   tsx scripts/threadsPublish.ts post-ig --out <輸出> --state-dir <...>       # Instagram 同步：要 INSTAGRAM_ACCESS_TOKEN；JPEG 網址放 IG_IMAGE_URLS（逗號分隔）
+ *   tsx scripts/threadsPublish.ts token-ig --token-out <檔案> [--force]              # IG 權杖續期（每週一或 --force）
  *
  * 選項：--picks（預設 packages/server/threads_picks.json）、--comments（預設 docs/threads/comments）、--start（第一篇的日期）。
  * 權杖只從環境變數讀，不印出、不寫進 out；token 指令續期後的新權杖只寫到 --token-out 指定的檔案（CI 用完即刪）。
@@ -15,11 +17,13 @@ import path from 'path';
 import { buildSimBank, readSimBankFile } from '../src/bots/simulation/bank';
 import { readRecordPosts } from '../src/bots/simulation/recordsIndex';
 import { ThreadsGenerator } from '../src/bots/threads/generate';
-import { gridOverflowStart, renderPuzzlePng } from '../src/bots/threads/image';
+import * as threadsImage from '../src/bots/threads/image';
 import { THREADS_START_DATE, taipeiToday, weekdayOf } from '../src/bots/threads/plan';
-import { loadPlayerNames, planSummary, postDaily, prepareDaily, readPicks, readState, recordManual, savedFromState, findByExercise, type DailyPlan } from '../src/bots/threads/publish/daily';
+import { igCaption, loadPlayerNames, planSummary, postDaily, postInstagram, prepareDaily, readPicks, readState, recordManual, savedFromState, findByExercise, type DailyPlan } from '../src/bots/threads/publish/daily';
+import { extraRenderers } from '../src/bots/threads/publish/extraImages';
 import { gitCheckpoint } from '../src/bots/threads/publish/stateGit';
 import { ThreadsApi, tokenProblem } from '../src/bots/threads/publish/threadsApi';
+import { InstagramApi } from '../src/bots/threads/publish/instagramApi';
 
 const serverRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(serverRoot, '..', '..');
@@ -82,6 +86,27 @@ async function checkToken(api: ThreadsApi): Promise<void> {
 
 function printPlan(plan: DailyPlan, mode: string): void {
   for (const line of planSummary(plan, mode)) say(line);
+  // IG 說明含貼文和留言：內容檢查過了才印（Actions 的紀錄是公開的）。
+  if (process.env.IG_PREVIEW === '1' && plan.errors.length === 0) {
+    say('### Instagram 說明（同步用）');
+    say('```');
+    say(igCaption(plan));
+    say('```');
+  }
+}
+
+function igFromEnv(userId = process.env.INSTAGRAM_USER_ID || 'me'): InstagramApi {
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN ?? '';
+  if (!token) throw new Error('沒有 INSTAGRAM_ACCESS_TOKEN（GitHub secrets）');
+  return new InstagramApi({ token, userId });
+}
+
+/** 沒設 INSTAGRAM_USER_ID 時用權杖查出 IG 帳號 id。 */
+async function igWithUser(): Promise<InstagramApi> {
+  if (process.env.INSTAGRAM_USER_ID) return igFromEnv();
+  const me = await igFromEnv().me();
+  if (!me.id) throw new Error('查不到 IG 帳號 id：權杖要有 instagram_business_basic，帳號要是專業帳號');
+  return igFromEnv(me.id);
 }
 
 async function main(): Promise<number> {
@@ -104,13 +129,14 @@ async function main(): Promise<number> {
         : (d): Buffer | null => {
             const pick = gen.pickFor(d);
             const pv = pick ? gen.viewOf(pick) : null;
-            return pv ? renderPuzzlePng(pv, weekdayOf(d)) : null;
+            return pv ? threadsImage.renderPuzzlePng(pv, weekdayOf(d)) : null;
           },
-      // 牌譜太長時題目卡只畫前半、寫「往右滑」：這條管線只發一張圖，正式發佈這天不發（試跑只警告）。
+      renderExtraImages: flag('--no-image') ? undefined : extraRenderers(gen),
+      // 牌譜太長時題目卡只畫前半、寫「往右滑」：續圖（renderExtraImages 的 grid）沒產生就正式發佈這天不發。
       imageIncomplete: (d): string | null => {
         const pick = gen.pickFor(d);
         const pv = pick ? gen.viewOf(pick) : null;
-        return pv && gridOverflowStart(pv) !== null ? '牌譜太長，題目卡要第二張續圖，但這條管線只發一張圖' : null;
+        return pv && threadsImage.gridOverflowStart(pv) !== null ? '牌譜太長，題目卡要第二張續圖，但續圖沒有產生' : null;
       },
     });
     if (!plan) {
@@ -132,9 +158,13 @@ async function main(): Promise<number> {
     }
     const api = await apiWithUser();
     await checkToken(api);
+    const imageUrls = (process.env.IMAGE_URLS ?? '')
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean);
     // --checkpoint-push（CI）：每次真的發出東西就把狀態檔推上 threads-state，中斷也不會丟掉紀錄。
     const checkpoint = flag('--checkpoint-push') ? (label: string): Promise<void> => gitCheckpoint(stateDir, `threads: ${plan.date} ${label}`) : undefined;
-    const result = await postDaily(plan, { api, stateDir, imageUrl: process.env.IMAGE_URL || undefined, checkpoint });
+    const result = await postDaily(plan, { api, stateDir, imageUrls, imageUrl: process.env.IMAGE_URL || undefined, checkpoint });
     fs.writeFileSync(path.join(outDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
     say(`- 結果：${result.status}，貼文 ${result.permalink ?? result.postId}${result.commentId ? '，第一則留言已發' : ''}`);
     for (const n of result.notes) say(`- ${n}`);
@@ -184,7 +214,49 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  console.error('用法：threadsPublish.ts prepare|post|record-manual|token …');
+  if (cmd === 'post-ig') {
+    const plan = JSON.parse(fs.readFileSync(path.join(outDir, 'plan.json'), 'utf8')) as DailyPlan;
+    const imageUrls = (process.env.IG_IMAGE_URLS ?? '')
+      .split(',')
+      .map((u) => u.trim())
+      .filter(Boolean);
+    // 先確認 IG 權杖能發文；確認不了就跳過 IG（只警告、這一步不失敗），不影響 Threads。
+    let api: InstagramApi;
+    try {
+      api = await igWithUser();
+    } catch (err) {
+      say(`- ⚠️ Instagram 跳過：${(err as Error).message}`);
+      console.log(`::warning::Instagram 跳過：確認不了 IG 權杖`);
+      flushSummary();
+      return 0;
+    }
+    const problem = await api.publishingProblem();
+    if (problem) {
+      say(`- ⚠️ Instagram 跳過：${problem}`);
+      console.log(`::warning::Instagram 跳過：${problem}`);
+      flushSummary();
+      return 0;
+    }
+    const checkpoint = flag('--checkpoint-push') ? (label: string): Promise<void> => gitCheckpoint(stateDir, `threads: ${plan.date} ${label}`) : undefined;
+    const r = await postInstagram(plan, { api, stateDir, imageUrls, checkpoint });
+    say(`- Instagram：${r.status}${r.permalink ? `，${r.permalink}` : r.mediaId ? `，貼文 ${r.mediaId}` : ''}`);
+    for (const n of r.notes) say(`- ${n}`);
+    flushSummary();
+    return 0;
+  }
+
+  if (cmd === 'token-ig') {
+    const out = arg('--token-out');
+    if (out && (flag('--force') || weekdayOf(taipeiToday()) === 1)) {
+      const r = await igFromEnv().refresh();
+      fs.writeFileSync(out, r.token, { mode: 0o600 });
+      say(`- IG 權杖已續期（${Math.floor(r.expiresIn / 86_400)} 天後到期），由下一步寫回 secrets`);
+    }
+    flushSummary();
+    return 0;
+  }
+
+  console.error('用法：threadsPublish.ts prepare|post|record-manual|token|post-ig|token-ig …');
   return 1;
 }
 

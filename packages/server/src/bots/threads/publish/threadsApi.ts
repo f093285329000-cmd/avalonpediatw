@@ -18,6 +18,8 @@ export const THREADS_API_VERSION = 'v1.0';
  * threads_read_replies：發留言前先查自己已經回過的（上次發了卻沒記下來就沿用，不重複留言）。
  */
 export const REQUIRED_SCOPES = ['threads_basic', 'threads_content_publish', 'threads_manage_replies', 'threads_read_replies'] as const;
+/** 輪播最多幾張（Threads 的上限是 20；我們一天最多 3 張）。 */
+export const THREADS_CAROUSEL_MAX = 20;
 
 export type FetchLike = (url: string, init?: { method?: string; body?: string; headers?: Record<string, string> }) => Promise<{
   ok: boolean;
@@ -235,17 +237,30 @@ export class ThreadsApi {
     return this.publishContainer(c.id, find);
   }
 
-  /** 新貼文：有圖就是圖文；quotePostId＝引用昨天的貼文。find：回應不明時找已經發出去的那一篇。 */
-  async publishPost(input: { text: string; imageUrl?: string; quotePostId?: string; find?: () => Promise<string | null> }): Promise<string> {
-    return this.createAndPublish(
-      {
-        media_type: input.imageUrl ? 'IMAGE' : 'TEXT',
-        text: input.text,
-        image_url: input.imageUrl,
-        quote_post_id: input.quotePostId,
-      },
-      input.find,
-    );
+  /**
+   * 新貼文：沒有圖＝純文字；一張＝圖文；兩張以上＝輪播（每張先建 is_carousel_item 容器，
+   * 再建 CAROUSEL 容器帶文字與引用）。quotePostId＝引用昨天的貼文。find：回應不明時找已經發出去的那一篇。
+   */
+  async publishPost(input: { text: string; imageUrl?: string; imageUrls?: readonly string[]; quotePostId?: string; find?: () => Promise<string | null> }): Promise<string> {
+    const urls = (input.imageUrls?.length ? input.imageUrls : input.imageUrl ? [input.imageUrl] : []).slice(0, THREADS_CAROUSEL_MAX);
+    if (urls.length <= 1) {
+      return this.createAndPublish(
+        {
+          media_type: urls.length === 1 ? 'IMAGE' : 'TEXT',
+          text: input.text,
+          image_url: urls[0],
+          quote_post_id: input.quotePostId,
+        },
+        input.find,
+      );
+    }
+    const children: string[] = [];
+    for (const url of urls) {
+      const c = await this.call<{ id: string }>('POST', this.v(`/${this.opts.userId}/threads`), { media_type: 'IMAGE', image_url: url, is_carousel_item: 'true' });
+      await this.waitContainer(c.id);
+      children.push(c.id);
+    }
+    return this.createAndPublish({ media_type: 'CAROUSEL', children: children.join(','), text: input.text, quote_post_id: input.quotePostId }, input.find);
   }
 
   /** 回覆（第一則留言）。find：回應不明時找已經發出去的那一則。 */

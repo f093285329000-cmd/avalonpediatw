@@ -22,6 +22,7 @@ import { SEE_IMAGE_LINE, THREADS_MAX_CHARS, THREADS_TOPIC_TAG } from '../draft';
 import type { ThreadsGenerator } from '../generate';
 import { addDays, exerciseIdOfPick, taipeiToday } from '../plan';
 import type { ThreadsApi, RecentPost } from './threadsApi';
+import { INSTAGRAM_CAPTION_MAX, type InstagramApi, type RecentMedia } from './instagramApi';
 
 // ─── 站長選的題（threads_picks.json） ───────────────────────────────────────
 
@@ -68,6 +69,8 @@ export interface ThreadsStateRecord {
   quotePostId?: string | null;
   commentId?: string | null;
   publishedAt?: string;
+  /** Instagram 同步（有開才有）。 */
+  ig?: { mediaId: string; permalink?: string; publishedAt?: string };
 }
 
 export function statePath(stateDir: string, date: string): string {
@@ -195,8 +198,10 @@ export interface DailyPlan {
   chars: number;
   comment: string;
   commentSource: 'chatgpt' | 'fallback';
-  /** 圖檔（out 資料夾裡的檔名）；沒有圖是 null。 */
+  /** 第一張圖（題目卡，out 資料夾裡的檔名）；沒有圖是 null。 */
   image: string | null;
+  /** 全部的圖，照發文順序：題目卡、牌譜圖、答案卡（有幾張放幾張）。兩張以上發成輪播。 */
+  images: string[];
   /** 要引用的昨天貼文；第一天是 null。postId 沒記到的話 post 段會去自己最近的貼文裡找。 */
   quote: { date: string; exerciseId: string; postId: string | null } | null;
   /** 已經發過了（狀態檔有貼文 id）：post 段不再發 A。 */
@@ -219,8 +224,11 @@ export interface PrepareDeps {
   commentsDir: string;
   outDir: string;
   names?: readonly string[];
-  /** 畫圖（pv → PNG）；不給就不附圖。 */
+  /** 畫題目卡（PNG）；不給就不附圖。 */
   renderImage?: (date: string) => Buffer | null;
+  /** 題目卡之後的圖（照順序：牌譜圖、答案卡），檔名是 `<日期>-<suffix>.png`；沒有題目卡就不畫。 */
+  /** png 是 null＝這張今天不用（例如牌譜放得進題目卡，就沒有續圖）。 */
+  renderExtraImages?: (date: string, draft: ThreadsDraft) => { suffix: string; png: Buffer | null }[];
   /** 有圖的時候檢查：這張圖單獨發會不會不完整（回傳原因；null＝沒問題）。 */
   imageIncomplete?: (date: string) => string | null;
   warnings?: string[];
@@ -245,8 +253,23 @@ export function prepareDaily(date: string, deps: PrepareDeps): DailyPlan | null 
   const draft = deps.gen.draftFor(date, image ? { image } : {});
   if (!draft) return null;
   warnings.push(...deps.gen.warnings);
+  const images = image ? [image] : [];
+  if (image && deps.renderExtraImages) {
+    try {
+      for (const extra of deps.renderExtraImages(date, draft)) {
+        if (!extra.png) continue;
+        const name = `${date}-${extra.suffix}.png`;
+        fs.writeFileSync(path.join(deps.outDir, name), extra.png);
+        images.push(name);
+      }
+    } catch (err) {
+      warnings.push(`其他的圖沒有全部產生（${(err as Error).message}）`);
+    }
+  }
 
-  let liveBlock = image && deps.imageIncomplete ? deps.imageIncomplete(date) : null;
+  // 要續圖、續圖也產生了（輪播裡有 -grid）就沒問題；續圖沒產生才擋。
+  const incomplete = image && deps.imageIncomplete ? deps.imageIncomplete(date) : null;
+  let liveBlock = incomplete && !images.some((n) => n.endsWith('-grid.png')) ? incomplete : null;
   // 貼文的牌譜縮成「完整局面看圖」卻沒有圖：只發文字會是不完整的題目。
   if (!liveBlock && !image && draft.post.text.includes(SEE_IMAGE_LINE)) liveBlock = '貼文的牌譜寫「完整局面看圖」，但圖沒有產生';
   if (liveBlock) warnings.push(`${liveBlock}（試跑照常；正式發佈這天不發）`);
@@ -273,6 +296,7 @@ export function prepareDaily(date: string, deps: PrepareDeps): DailyPlan | null 
     comment,
     commentSource: chatgpt ? 'chatgpt' : 'fallback',
     image,
+    images,
     quote,
     alreadyPublished: !!existing?.postId,
     liveBlock,
@@ -306,7 +330,7 @@ export function planSummary(plan: DailyPlan, mode: string): string[] {
   const out: string[] = [];
   out.push(`## Threads ${plan.date}（${plan.draft.theme}）— ${mode}`);
   out.push('');
-  out.push(`- 題號 ${plan.exerciseId}，貼文 ${plan.chars} 字，圖：${plan.image ? '有' : '沒有'}，第一則留言：${plan.commentSource === 'chatgpt' ? 'ChatGPT' : '備案'}`);
+  out.push(`- 題號 ${plan.exerciseId}，貼文 ${plan.chars} 字，圖：${plan.images.length === 0 ? '沒有' : plan.images.length === 1 ? '1 張' : `${plan.images.length} 張（輪播：${plan.images.join('、')}）`}，第一則留言：${plan.commentSource === 'chatgpt' ? 'ChatGPT' : '備案'}`);
   out.push(`- 引用：${plan.quote ? `${plan.quote.date}（題號 ${plan.quote.exerciseId}，貼文 id ${plan.quote.postId ?? '還沒記到，發文時去最近的貼文找'}）` : '不引用（第一天）'}`);
   if (plan.alreadyPublished) out.push(plan.resumeComment ? '- 這一天的 A 已經發了、第一則留言還沒成功：只補發留言' : '- 這一天已經發過了：不會再發');
   for (const w of plan.warnings) out.push(`- ⚠️ ${w}`);
@@ -320,6 +344,18 @@ export function planSummary(plan: DailyPlan, mode: string): string[] {
 }
 
 // ─── post ───────────────────────────────────────────────────────────────────
+
+/**
+ * 用這些公開網址的圖發今天這篇，題目會不會不完整（回傳原因；null＝可以發）。Threads 和 IG 共用：
+ * prepare 已經擋下的（liveBlock）、要續圖但不是每張圖都有網址、貼文寫「完整局面看圖」卻一張圖都沒有。
+ */
+export function imageProblem(plan: Pick<DailyPlan, 'liveBlock' | 'images' | 'image' | 'text'>, imageUrls: readonly string[]): string | null {
+  if (plan.liveBlock) return plan.liveBlock;
+  const images = plan.images ?? (plan.image ? [plan.image] : []);
+  if (images.some((n) => n.endsWith('-grid.png')) && imageUrls.length < images.length) return `題目要續圖，但只有 ${imageUrls.length}／${images.length} 張圖有公開網址`;
+  if (plan.text.includes(SEE_IMAGE_LINE) && imageUrls.length === 0) return '貼文的牌譜寫「完整局面看圖」，但圖沒有公開網址';
+  return null;
+}
 
 /** API 的時間（例如 2026-11-18T04:00:00+0000）→ 台北日期；讀不懂回 null。 */
 export function taipeiDateOf(timestamp: string | undefined): string | null {
@@ -350,6 +386,7 @@ export interface PostDeps {
   api: ThreadsApi;
   stateDir: string;
   imageUrl?: string;
+  imageUrls?: readonly string[];
   now?: () => Date;
   /**
    * 每次真的發出東西（A、第一則留言）、寫好狀態檔之後馬上呼叫：CI 用它把狀態檔 commit＋push 上 threads-state，
@@ -413,7 +450,8 @@ export async function postDaily(plan: DailyPlan, deps: PostDeps): Promise<PostRe
   const dup = findByExercise(recent, plan.exerciseId, plan.date);
   if (dup) {
     // 上次發了卻沒記下來（例如狀態檔沒推上去就中斷）：補記 A，留言也先查再補。
-    const rec: ThreadsStateRecord = { date: plan.date, exerciseId: plan.exerciseId, draft: plan.draft, source: 'auto', postId: dup.id, permalink: dup.permalink, commentId: null, publishedAt: dup.timestamp };
+    // 同一天 IG 可能先發了：保留狀態檔裡已有的欄位。
+    const rec: ThreadsStateRecord = { ...existing, date: plan.date, exerciseId: plan.exerciseId, draft: plan.draft, source: 'auto', postId: dup.id, permalink: dup.permalink, commentId: null, publishedAt: dup.timestamp };
     await saveCheckpoint(deps, rec, 'A（補記）', notes);
     const commentId = await ensureComment(plan, dup.id, deps, notes);
     if (commentId) await saveCheckpoint(deps, { ...rec, commentId }, '第一則留言', notes);
@@ -433,19 +471,24 @@ export async function postDaily(plan: DailyPlan, deps: PostDeps): Promise<PostRe
     }
   }
 
-  // 發新的 A 之前：題目不完整（例如少了續圖）就不發（fail closed）。補留言、補記不受影響。
-  if (plan.liveBlock) throw new Error(`這天不自動發：${plan.liveBlock}`);
-  if (plan.text.includes(SEE_IMAGE_LINE) && !(plan.image && deps.imageUrl)) throw new Error('這天不自動發：貼文的牌譜寫「完整局面看圖」，但圖沒有公開網址');
-  if (plan.image && !deps.imageUrl) notes.push('有圖但沒有公開網址：只發文字');
+  const imageUrls = deps.imageUrls?.length ? [...deps.imageUrls] : deps.imageUrl ? [deps.imageUrl] : [];
+  const wanted = plan.images?.length ?? (plan.image ? 1 : 0);
+  if (wanted > 0 && imageUrls.length === 0) notes.push('有圖但沒有公開網址：只發文字');
+  else if (imageUrls.length > 0 && imageUrls.length < wanted) notes.push(`只有 ${imageUrls.length}／${wanted} 張圖有公開網址`);
+  if (imageUrls.length > 1) notes.push(`輪播 ${imageUrls.length} 張`);
+  // 題目不完整（少了續圖、要看圖卻沒有圖）就不發（fail closed）。補留言、補記不受影響。
+  const missing = imageProblem(plan, imageUrls);
+  if (missing) throw new Error(`這天不自動發：${missing}`);
   const postId = await deps.api.publishPost({
     text: plan.text,
-    ...(plan.image && deps.imageUrl ? { imageUrl: deps.imageUrl } : {}),
+    imageUrls,
     ...(quotePostId ? { quotePostId } : {}),
     // 回應不明時：自己最近的貼文裡有今天的題號就是已經發了
     find: async () => findByExercise(await deps.api.recentPosts(), plan.exerciseId, plan.date)?.id ?? null,
   });
   // 先記下 A（並推上去）：留言失敗或中斷時重跑不會再發一次 A。
-  const rec: ThreadsStateRecord = { date: plan.date, exerciseId: plan.exerciseId, draft: plan.draft, source: 'auto', postId, quotePostId, commentId: null, publishedAt: now().toISOString() };
+  // 同一天 IG 可能先發了（只開 IG 的時候）：保留狀態檔裡已有的欄位。
+  const rec: ThreadsStateRecord = { ...existing, date: plan.date, exerciseId: plan.exerciseId, draft: plan.draft, source: 'auto', postId, quotePostId, commentId: null, publishedAt: now().toISOString() };
   await saveCheckpoint(deps, rec, 'A', notes);
 
   // 留言一發成功就記下（並推上去）：之後查網址失敗或中斷，下一次也不會以為留言沒發、再留一次。
@@ -464,4 +507,78 @@ export function recordManual(date: string, postId: string | null, deps: { gen: T
   const rec: ThreadsStateRecord = { date, exerciseId: draft.exerciseId, draft, source: 'manual', postId, ...(deps.permalink ? { permalink: deps.permalink } : {}) };
   writeState(deps.stateDir, rec);
   return rec;
+}
+
+// ─── Instagram 同步 ─────────────────────────────────────────────────────────
+
+/**
+ * IG 的貼文說明：Threads 那篇的文字（IG 沒有引用貼文，昨天的答案照樣寫在裡面），
+ * 後面接第一則留言（觀念＋文章網址；IG 說明裡的網址不能點，照純文字放）。#阿瓦隆 放最後一行。
+ */
+export function igCaption(plan: Pick<DailyPlan, 'text' | 'comment'>): string {
+  const body = plan.text
+    .split('\n')
+    .filter((l) => l.trim() !== THREADS_TOPIC_TAG)
+    .join('\n')
+    .trimEnd();
+  const caption = `${body}\n\n${plan.comment.trim()}\n\n${THREADS_TOPIC_TAG}`;
+  return [...caption].length <= INSTAGRAM_CAPTION_MAX ? caption : `${body}\n\n${THREADS_TOPIC_TAG}`;
+}
+
+/** 自己最近的 IG 貼文裡找「題號 <題號>」那一篇。 */
+/** IG 最近的貼文裡找「題號 <題號>」那一篇；給 date 時只認那一天（台北）發的（同一題之前發過的舊貼文不算）。 */
+export function findMediaByExercise(media: readonly RecentMedia[], exerciseId: string, date?: string): RecentMedia | null {
+  const needle = `題號 ${exerciseId}`;
+  return media.find((m) => (m.caption ?? '').includes(needle) && (date === undefined || taipeiDateOf(m.timestamp) === date)) ?? null;
+}
+
+export interface IgResult {
+  status: 'published' | 'already-published' | 'found-existing' | 'skipped';
+  mediaId?: string;
+  permalink?: string;
+  notes: string[];
+}
+
+/** 狀態檔沒有這一天時（例如只開了 IG）先建一筆，Threads 那邊之後照樣能發。 */
+function stateOrNew(stateDir: string, plan: DailyPlan): ThreadsStateRecord {
+  return readState(stateDir, plan.date) ?? { date: plan.date, exerciseId: plan.exerciseId, draft: plan.draft, source: 'auto', postId: null };
+}
+
+export async function postInstagram(
+  plan: DailyPlan,
+  deps: { api: InstagramApi; stateDir: string; imageUrls: readonly string[]; now?: () => Date; checkpoint?: (label: string) => Promise<void> | void },
+): Promise<IgResult> {
+  const now = deps.now ?? ((): Date => new Date());
+  if (plan.errors.length > 0) throw new Error(`內容檢查沒過：${plan.errors.join('；')}`);
+  const existing = readState(deps.stateDir, plan.date);
+  if (existing?.ig?.mediaId) return { status: 'already-published', mediaId: existing.ig.mediaId, permalink: existing.ig.permalink, notes: ['狀態檔已經有這一天的 IG 貼文'] };
+  if (deps.imageUrls.length === 0) return { status: 'skipped', notes: ['沒有圖：IG 不能只發文字，這天不同步'] };
+  // 題目不完整（prepare 擋下的、少了續圖的網址）：IG 這天不同步（只記原因，不影響 Threads）。
+  const missing = imageProblem(plan, deps.imageUrls);
+  if (missing) return { status: 'skipped', notes: [`IG 這天不同步：${missing}`] };
+
+  const dup = findMediaByExercise(await deps.api.recentMedia(), plan.exerciseId, plan.date);
+  if (dup) {
+    writeState(deps.stateDir, { ...stateOrNew(deps.stateDir, plan), ig: { mediaId: dup.id, permalink: dup.permalink, publishedAt: dup.timestamp } });
+    return { status: 'found-existing', mediaId: dup.id, permalink: dup.permalink, notes: ['IG 最近的貼文裡已經有今天的題號，補記、不再發'] };
+  }
+  const notes: string[] = deps.imageUrls.length > 1 ? [`輪播 ${deps.imageUrls.length} 張`] : [];
+  const mediaId = await deps.api.publish({
+    imageUrls: deps.imageUrls,
+    caption: igCaption(plan),
+    // 回應不明時：IG 最近的貼文裡有今天的題號就是已經發了
+    find: async () => findMediaByExercise(await deps.api.recentMedia(), plan.exerciseId, plan.date)?.id ?? null,
+  });
+  // 發出去就記下並馬上推上去（跟 Threads 的 checkpoint 一樣）：中斷也不會再發一次。
+  writeState(deps.stateDir, { ...stateOrNew(deps.stateDir, plan), ig: { mediaId, publishedAt: now().toISOString() } });
+  if (deps.checkpoint) {
+    try {
+      await deps.checkpoint('IG');
+    } catch (err) {
+      notes.push(`狀態檔沒推上去（IG）：${(err as Error).message}`);
+    }
+  }
+  const permalink = await deps.api.permalink(mediaId);
+  if (permalink) writeState(deps.stateDir, { ...stateOrNew(deps.stateDir, plan), ig: { mediaId, permalink, publishedAt: now().toISOString() } });
+  return { status: 'published', mediaId, permalink, notes };
 }

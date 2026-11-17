@@ -17,6 +17,9 @@ import { readRecordPosts } from '../bots/simulation/recordsIndex';
 import { ThreadsGenerator } from '../bots/threads/generate';
 import { addDays, exerciseIdOfPick, weekdayOf } from '../bots/threads/plan';
 import {
+  igCaption,
+  imageProblem,
+  postInstagram,
   fallbackComment,
   loadPlayerNames,
   planSummary,
@@ -32,9 +35,12 @@ import {
   writeState,
   type DailyPlan,
 } from '../bots/threads/publish/daily';
+import { extraRenderers } from '../bots/threads/publish/extraImages';
+import { gridOverflowStart, renderPuzzlePng } from '../bots/threads/image';
 import { SEE_IMAGE_LINE } from '../bots/threads/draft';
 import { gitCheckpoint } from '../bots/threads/publish/stateGit';
 import { REQUIRED_SCOPES, ThreadsApi, redact, tokenProblem, type FetchLike } from '../bots/threads/publish/threadsApi';
+import { InstagramApi } from '../bots/threads/publish/instagramApi';
 
 const serverRoot = path.resolve(__dirname, '..', '..');
 let bank: SimBank;
@@ -569,6 +575,141 @@ describe('prepare + post', () => {
   });
 });
 
+describe('threads carousel', () => {
+  it('question card, grid and answer card are kept in order and posted as one carousel with the text and the quote', async () => {
+    const stateDir = tmp();
+    const g = gen(stateDir);
+    recordManual('2026-11-17', null, { gen: g, stateDir });
+    const outDir = tmp();
+    const plan = prepareDaily('2026-11-18', {
+      gen: g,
+      stateDir,
+      commentsDir: tmp(),
+      outDir,
+      names,
+      renderImage: () => Buffer.from('q'),
+      renderExtraImages: () => [
+        { suffix: 'grid', png: Buffer.from('g') },
+        { suffix: 'answer', png: Buffer.from('a') },
+      ],
+    });
+    if (!plan) throw new Error('no plan');
+    expect(plan.images).toEqual(['2026-11-18.png', '2026-11-18-grid.png', '2026-11-18-answer.png']);
+    expect(fs.existsSync(path.join(outDir, '2026-11-18-grid.png'))).toBe(true);
+    const urls = plan.images.map((n) => `https://raw.githubusercontent.com/o/r/sha/images/${n}`);
+    const { api, calls } = fakeApi({ recent: [{ id: 'y17', text: '題號 36AKW-2-5', timestamp: ON_17 }] });
+    const res = await postDaily(plan, { api, stateDir, imageUrls: urls });
+    const creates = calls.filter((c) => c.method === 'POST' && c.path.endsWith('/42/threads'));
+    // 3 張子項、1 個輪播容器、1 則留言。
+    expect(creates.map((c) => c.params.get('media_type'))).toEqual(['IMAGE', 'IMAGE', 'IMAGE', 'CAROUSEL', 'TEXT']);
+    expect(creates.slice(0, 3).map((c) => c.params.get('image_url'))).toEqual(urls);
+    expect(creates.slice(0, 3).every((c) => c.params.get('is_carousel_item') === 'true')).toBe(true);
+    const carousel = creates[3];
+    expect(carousel.params.get('children')).toBe('c1,c2,c3');
+    expect(carousel.params.get('text')).toBe(plan.text);
+    expect(carousel.params.get('quote_post_id')).toBe('y17');
+    expect(creates[4].params.get('reply_to_id')).toBe(res.postId);
+    expect(res.notes).toContain('輪播 3 張');
+    expect(readState(stateDir, '2026-11-18')?.postId).toBe(res.postId);
+  });
+
+  it('a long record: the Threads carousel is question card → continuation → answer card; without the continuation it is not published live', async () => {
+    // 找一天：題目卡放不下牌譜（要續圖），而且那天公布昨天的完整答案（有答案卡）
+    const stateDir = tmp();
+    const g = gen(stateDir);
+    let date: string | null = null;
+    for (let i = 1; i < 200 && !date; i++) {
+      const d = addDays('2026-11-17', i);
+      const pick = g.pickFor(d);
+      const pv = pick ? g.viewOf(pick) : null;
+      const draft = pv && gridOverflowStart(pv) !== null ? g.draftFor(d) : null;
+      if (draft?.answerToYesterday && !draft.continuesYesterday) date = d;
+    }
+    expect(date).not.toBeNull();
+    const d = date as string;
+    const pv = g.viewOf(g.pickFor(d)!)!;
+    const incomplete = (): string | null => (gridOverflowStart(pv) !== null ? '牌譜太長，題目卡要第二張續圖，但續圖沒有產生' : null);
+    const plan = prepareDaily(d, {
+      gen: g,
+      stateDir,
+      commentsDir: tmp(),
+      outDir: tmp(),
+      names,
+      renderImage: () => renderPuzzlePng(pv, weekdayOf(d)),
+      renderExtraImages: extraRenderers(g),
+      imageIncomplete: incomplete,
+    }) as DailyPlan;
+    expect(plan.images).toEqual([`${d}.png`, `${d}-grid.png`, `${d}-answer.png`]);
+    expect(plan.liveBlock).toBeNull();
+    const urls = plan.images.map((n) => `https://raw.githubusercontent.com/o/r/sha/images/${n}`);
+    const { api, calls } = fakeApi();
+    await postDaily(plan, { api, stateDir, imageUrls: urls });
+    const creates = calls.filter((c) => c.method === 'POST' && c.path.endsWith('/42/threads'));
+    expect(creates.slice(0, 3).map((c) => c.params.get('image_url'))).toEqual(urls); // 題目卡 → 續圖 → 答案卡
+    expect(creates[3].params.get('media_type')).toBe('CAROUSEL');
+    expect(creates[3].params.get('children')).toBe('c1,c2,c3');
+
+    // 續圖沒產生：試跑警告、正式發佈不發；續圖有產生但少了公開網址也不發
+    const s2 = tmp();
+    const noGrid = prepareDaily(d, {
+      gen: gen(s2),
+      stateDir: s2,
+      commentsDir: tmp(),
+      outDir: tmp(),
+      names,
+      renderImage: () => Buffer.from('q'),
+      renderExtraImages: () => [{ suffix: 'answer', png: Buffer.from('a') }],
+      imageIncomplete: incomplete,
+    }) as DailyPlan;
+    expect(noGrid.liveBlock).toContain('續圖沒有產生');
+    await expect(postDaily(noGrid, { api: fakeApi().api, stateDir: s2, imageUrls: ['u1', 'u2'] })).rejects.toThrow('這天不自動發');
+    await expect(postDaily(plan, { api: fakeApi().api, stateDir: tmp(), imageUrls: urls.slice(0, 1) })).rejects.toThrow('公開網址');
+  }, 60_000); // 畫三張圖＋排程找日子：CI 整套平行跑時會超過預設 5 秒
+
+  it('an extra image that is not needed today (grid fits on the card → null) is skipped without dropping the answer card', () => {
+    const stateDir = tmp();
+    const plan = prepareDaily('2026-11-18', {
+      gen: gen(stateDir),
+      stateDir,
+      commentsDir: tmp(),
+      outDir: tmp(),
+      names,
+      renderImage: () => Buffer.from('q'),
+      renderExtraImages: () => [
+        { suffix: 'grid', png: null },
+        { suffix: 'answer', png: Buffer.from('a') },
+      ],
+    });
+    if (!plan) throw new Error('no plan');
+    expect(plan.images).toEqual(['2026-11-18.png', '2026-11-18-answer.png']);
+    expect(plan.warnings.join()).not.toContain('其他的圖');
+  });
+
+  it('one image stays a single image post; a failing extra renderer keeps the question card', async () => {
+    const stateDir = tmp();
+    const g = gen(stateDir);
+    const plan = prepareDaily('2026-11-18', {
+      gen: g,
+      stateDir,
+      commentsDir: tmp(),
+      outDir: tmp(),
+      names,
+      renderImage: () => Buffer.from('q'),
+      renderExtraImages: () => {
+        throw new Error('font missing');
+      },
+    });
+    if (!plan) throw new Error('no plan');
+    expect(plan.images).toEqual(['2026-11-18.png']);
+    expect(plan.warnings.join()).toContain('font missing');
+    const { api, calls } = fakeApi();
+    await postDaily(plan, { api, stateDir, imageUrls: ['https://x/2026-11-18.png'] });
+    const first = calls.find((c) => c.method === 'POST' && c.path.endsWith('/42/threads'));
+    expect(first?.params.get('media_type')).toBe('IMAGE');
+    expect(first?.params.get('is_carousel_item')).toBeNull();
+  });
+});
+
 describe('token check', () => {
   it('fails closed when permissions cannot be confirmed; passes only a valid token with every scope', () => {
     expect(tokenProblem(null)).toContain('確認不了權限');
@@ -597,6 +738,170 @@ describe('api', () => {
   });
 });
 
+/**
+ * 假的 Instagram API：發佈後真的出現在最近的貼文裡。
+ * losePublish：發佈其實成功但回應丟了（回 503）幾次；noLimit：查不到發文額度（權限不夠）；noMe：查不到帳號。
+ */
+function fakeIg(opts: { recent?: { id: string; caption: string; timestamp?: string }[]; losePublish?: number; noLimit?: boolean; noMe?: boolean } = {}) {
+  const calls: { method: string; path: string; params: URLSearchParams }[] = [];
+  const containers = new Map<string, string>();
+  const published: { id: string; caption: string; timestamp?: string }[] = [];
+  const publishCalls: string[] = [];
+  let n = 0;
+  let lose = opts.losePublish ?? 0;
+  const fetch: FetchLike = async (url, init) => {
+    const u = new URL(url);
+    calls.push({ method: init?.method ?? 'GET', path: u.pathname, params: u.searchParams });
+    const reply = (status: number, body: unknown) => ({ ok: status < 400, status, text: async () => JSON.stringify(body) });
+    if (u.pathname.endsWith('/media') && init?.method === 'POST') {
+      const id = `ic${++n}`;
+      containers.set(id, u.searchParams.get('caption') ?? '');
+      return reply(200, { id });
+    }
+    if (u.pathname.endsWith('/media_publish')) {
+      const cid = u.searchParams.get('creation_id') ?? '';
+      publishCalls.push(cid);
+      const id = `im${cid}`;
+      if (published.some((p) => p.id === id)) return reply(400, { error: { message: 'already published' } });
+      published.unshift({ id, caption: containers.get(cid) ?? '', timestamp: '2026-11-18T04:00:00+0000' });
+      if (lose > 0) {
+        lose--;
+        return reply(503, { error: { message: 'gateway timeout' } });
+      }
+      return reply(200, { id });
+    }
+    if (u.pathname.endsWith('/media')) return reply(200, { data: [...published, ...(opts.recent ?? [])] });
+    if (u.pathname.endsWith('/content_publishing_limit')) return opts.noLimit ? reply(403, { error: { message: 'missing permission' } }) : reply(200, { data: [{ quota_usage: 1, config: { quota_total: 50 } }] });
+    if (u.pathname.endsWith('/me')) return opts.noMe ? reply(401, { error: { message: 'invalid token' } }) : reply(200, { user_id: '77', username: 'x' });
+    if (u.searchParams.get('fields') === 'status_code,status') {
+      const cid = u.pathname.split('/').pop() ?? '';
+      return reply(200, { status_code: published.some((p) => p.id === `im${cid}`) ? 'PUBLISHED' : 'FINISHED' });
+    }
+    if (u.searchParams.get('fields') === 'permalink') return reply(200, { permalink: `https://www.instagram.com/p/${u.pathname.split('/').pop()}/` });
+    return reply(404, {});
+  };
+  return { api: new InstagramApi({ token: 'IG-SECRET', userId: '77', fetch, sleep: async () => {}, backoff: [1] }), calls, published, publishCalls };
+}
+
+describe('instagram', () => {
+  function prepared(): { plan: DailyPlan; stateDir: string } {
+    const stateDir = tmp();
+    const g = gen(stateDir);
+    const plan = prepareDaily('2026-11-18', { gen: g, stateDir, commentsDir: tmp(), outDir: tmp(), names, renderImage: () => Buffer.from('png') });
+    if (!plan) throw new Error('no plan');
+    return { plan, stateDir };
+  }
+
+  it('caption = the post text + the first comment, #阿瓦隆 once at the end, records link kept as text', () => {
+    const { plan } = prepared();
+    const c = igCaption(plan);
+    expect(c.startsWith(plan.text.split('\n')[0])).toBe(true);
+    expect(c).toContain(plan.comment);
+    expect(c.split('\n').filter((l) => l === '#阿瓦隆')).toHaveLength(1);
+    expect(c.endsWith('#阿瓦隆')).toBe(true);
+    expect(c).toContain('#records=');
+  });
+
+  it('single image: container → wait → publish; records the IG id next to the Threads state; never twice', async () => {
+    const { plan, stateDir } = prepared();
+    writeState(stateDir, { date: plan.date, exerciseId: plan.exerciseId, draft: plan.draft, source: 'auto', postId: 'th1' });
+    const { api, calls } = fakeIg();
+    const r = await postInstagram(plan, { api, stateDir, imageUrls: ['https://raw.githubusercontent.com/o/r/s/images/2026-11-18.jpg'] });
+    expect(r.status).toBe('published');
+    const create = calls.find((c) => c.method === 'POST' && c.path.endsWith('/77/media'));
+    expect(create?.params.get('image_url')).toContain('.jpg');
+    expect(create?.params.get('caption')).toBe(igCaption(plan));
+    expect(calls.some((c) => c.path.endsWith('/77/media_publish'))).toBe(true);
+    const st = readState(stateDir, plan.date);
+    expect(st?.postId).toBe('th1');
+    expect(st?.ig?.mediaId).toBe(r.mediaId);
+    expect(st?.ig?.permalink).toContain('instagram.com');
+    const again = fakeIg();
+    expect((await postInstagram(plan, { api: again.api, stateDir, imageUrls: ['x'] })).status).toBe('already-published');
+    expect(again.calls).toHaveLength(0);
+  });
+
+  it('two images make a carousel; a recent post with today’s 題號 is recorded; no image = skipped', async () => {
+    const { plan, stateDir } = prepared();
+    const { api, calls } = fakeIg();
+    await postInstagram(plan, { api, stateDir, imageUrls: ['https://x/a.jpg', 'https://x/b.jpg'] });
+    const posts = calls.filter((c) => c.method === 'POST' && c.path.endsWith('/77/media'));
+    expect(posts.map((c) => c.params.get('is_carousel_item'))).toEqual(['true', 'true', null]);
+    expect(posts[2].params.get('media_type')).toBe('CAROUSEL');
+    expect(posts[2].params.get('children')).toBe('ic1,ic2');
+
+    const s2 = prepared();
+    const dup = fakeIg({ recent: [{ id: 'old', caption: `題號 ${s2.plan.exerciseId}｜實戰牌譜`, timestamp: ON_18 }] });
+    expect((await postInstagram(s2.plan, { api: dup.api, stateDir: s2.stateDir, imageUrls: ['x'] })).status).toBe('found-existing');
+    expect(dup.calls.some((c) => c.method === 'POST')).toBe(false);
+    expect(readState(s2.stateDir, s2.plan.date)?.postId).toBeNull(); // Threads 那邊之後照樣能發
+
+    const s3 = prepared();
+    expect((await postInstagram(s3.plan, { api: fakeIg().api, stateDir: s3.stateDir, imageUrls: [] })).status).toBe('skipped');
+  });
+
+  it('IG published but the response was lost: adopts that post instead of publishing again; checkpoints after publishing', async () => {
+    const { plan, stateDir } = prepared();
+    const ig = fakeIg({ losePublish: 1 });
+    const labels: string[] = [];
+    const r = await postInstagram(plan, { api: ig.api, stateDir, imageUrls: ['https://x/a.jpg'], checkpoint: (l) => void labels.push(l) });
+    expect(r.status).toBe('published');
+    expect(ig.published).toHaveLength(1); // 只有一篇
+    expect(ig.publishCalls).toHaveLength(1); // 沒有重發
+    expect(r.mediaId).toBe(ig.published[0].id);
+    expect(readState(stateDir, plan.date)?.ig?.mediaId).toBe(r.mediaId);
+    expect(labels).toEqual(['IG']);
+  });
+
+  it('an older IG post of the same exercise (another day) is not taken for today: IG still publishes one post', async () => {
+    const { plan, stateDir } = prepared();
+    const ig = fakeIg({ recent: [{ id: 'old', caption: `題號 ${plan.exerciseId}｜實戰牌譜`, timestamp: '2026-11-10T04:00:00+0000' }], losePublish: 1 });
+    const r = await postInstagram(plan, { api: ig.api, stateDir, imageUrls: ['https://x/a.jpg'] });
+    expect(r.status).toBe('published');
+    expect(r.mediaId).not.toBe('old');
+    expect(ig.published).toHaveLength(1);
+    expect(r.mediaId).toBe(ig.published[0].id);
+  });
+
+  it('IG skips an incomplete puzzle the same way Threads does (liveBlock, missing continuation URL, text that needs the image), without publishing', async () => {
+    const { plan, stateDir } = prepared();
+    const cases: { p: DailyPlan; urls: string[] }[] = [
+      { p: { ...plan, liveBlock: '牌譜太長，題目卡要第二張續圖，但續圖沒有產生' }, urls: ['https://x/a.jpg'] },
+      { p: { ...plan, liveBlock: null, images: [`${plan.date}.png`, `${plan.date}-grid.png`, `${plan.date}-answer.png`] }, urls: ['https://x/a.jpg', 'https://x/c.jpg'] },
+    ];
+    for (const { p, urls } of cases) {
+      const ig = fakeIg();
+      const r = await postInstagram(p, { api: ig.api, stateDir, imageUrls: urls });
+      expect(r.status).toBe('skipped');
+      expect(r.notes.join()).toContain('IG 這天不同步');
+      expect(ig.calls.filter((c) => c.method === 'POST')).toHaveLength(0);
+      expect(readState(stateDir, plan.date)?.ig).toBeUndefined();
+    }
+    expect(imageProblem({ ...plan, liveBlock: null, images: [], image: null, text: `x\n${SEE_IMAGE_LINE}` }, [])).toContain('完整局面看圖');
+    // 完整的：照發
+    const ok = fakeIg();
+    expect((await postInstagram({ ...plan, liveBlock: null, images: [`${plan.date}.png`, `${plan.date}-grid.png`] }, { api: ok.api, stateDir, imageUrls: ['https://x/a.jpg', 'https://x/b.jpg'] })).status).toBe('published');
+  });
+
+  it('IG publishing is checked first: an unconfirmable token or missing publish permission is reported (IG skipped, Threads untouched)', async () => {
+    expect(await fakeIg().api.publishingProblem()).toBeNull();
+    expect(await fakeIg({ noLimit: true }).api.publishingProblem()).toContain('確認不了 IG 的發文權限');
+    expect(await fakeIg({ noMe: true }).api.publishingProblem()).toContain('查不到 IG 帳號');
+    const msg = (await fakeIg({ noMe: true }).api.publishingProblem()) ?? '';
+    expect(msg.includes('IG-SECRET')).toBe(false);
+  });
+
+  it('a Threads post after IG keeps the IG record', async () => {
+    const { plan, stateDir } = prepared();
+    await postInstagram(plan, { api: fakeIg().api, stateDir, imageUrls: ['x'] });
+    const { api } = fakeApi();
+    await postDaily(plan, { api, stateDir });
+    const st = readState(stateDir, plan.date);
+    expect(st?.postId).toBeTruthy();
+    expect(st?.ig?.mediaId).toBeTruthy();
+  });
+});
+
 describe('workflow', () => {
   // 沒有 YAML 套件：照兩格縮排的「- name:／- uses:」切出每一步，只看 id、if、continue-on-error 這幾行。
   const steps = (): { name: string; id?: string; cond: string; continueOnError: boolean; body: string }[] => {
@@ -612,6 +917,39 @@ describe('workflow', () => {
         body,
       }));
   };
+
+  it('an Instagram JPEG conversion failure does not stop the Threads upload and post; IG publishes only after a successful conversion', () => {
+    const all = steps();
+    const jpeg = all.find((s) => s.id === 'ig_jpeg');
+    expect(jpeg?.continueOnError).toBe(true);
+    const image = all.find((s) => s.id === 'image');
+    const post = all.find((s) => s.body.includes('threadsPublish.ts post --state-dir'));
+    const ig = all.find((s) => s.body.includes('threadsPublish.ts post-ig'));
+    expect(image && post && ig).toBeTruthy();
+    // Threads 的上傳和發文不看轉檔的結果
+    expect(image?.cond).not.toContain('ig_jpeg');
+    expect(post?.cond).not.toContain('ig_jpeg');
+    // IG 只在轉檔成功時發，也只拿轉檔成功的 JPEG 網址
+    expect(ig?.cond).toContain("steps.ig_jpeg.outcome == 'success'");
+    expect(image?.body).toContain("IG_JPEG_OK: ${{ steps.ig_jpeg.outcome == 'success' && '1' || '0' }}");
+    expect(image?.body.match(/IG_JPEG_OK" = 1/g)?.length).toBe(2);
+  });
+
+  it('an IG token refresh whose secret write fails only warns and does not stop Threads', () => {
+    const all = steps();
+    const refresh = all.find((s) => s.body.includes('token-ig --token-out'));
+    expect(refresh?.continueOnError).toBe(true);
+    expect(refresh?.body).toContain('if GH_TOKEN="$SECRETS_PAT" gh secret set INSTAGRAM_ACCESS_TOKEN');
+    expect(refresh?.body).toContain('::warning::');
+    // Threads 的產生不看 IG 續期的結果
+    expect(all.find((s) => s.id === 'prepare')?.cond).not.toMatch(/ig/i);
+  });
+
+  it('uploads the dry-run artifact when either Threads or IG is a dry run (IG JPEG previews with Threads live)', () => {
+    const upload = steps().find((s) => s.name.startsWith('試跑：把要發的內容存成附件'));
+    expect(upload?.cond).toContain("steps.gate.outputs.mode == 'dry-run'");
+    expect(upload?.cond).toContain("steps.gate.outputs.ig == 'dry-run'");
+  });
 
   it('job-level env does not use the runner context (GitHub rejects the whole workflow if it does)', () => {
     const yml = fs.readFileSync(path.join(serverRoot, '..', '..', '.github', 'workflows', 'threads-publish.yml'), 'utf8');
@@ -644,5 +982,7 @@ describe('workflow', () => {
   it('the live post step pushes the state right after each side effect (--checkpoint-push)', () => {
     const post = steps().find((s) => s.body.includes('threadsPublish.ts post --state-dir'));
     expect(post?.body).toMatch(/threadsPublish\.ts post --state-dir "\$STATE_DIR" --out "\$OUT_DIR" --checkpoint-push/);
+    const ig = steps().find((s) => s.body.includes('threadsPublish.ts post-ig'));
+    expect(ig?.body).toMatch(/threadsPublish\.ts post-ig --state-dir "\$STATE_DIR" --out "\$OUT_DIR" --checkpoint-push/);
   });
 });
