@@ -19,6 +19,10 @@
     "threads:draft": "tsx scripts/threadsDraft.ts",
     "threads:ai-answer": "tsx scripts/threadsAiAnswer.ts",
     "threads:publish": "tsx scripts/threadsPublish.ts",
+    "concepts:check": "tsx scripts/concepts.ts check",
+    "concepts:export": "tsx scripts/concepts.ts export",
+    "concepts:apply": "tsx scripts/concepts.ts apply",
+    "concepts:stamp": "tsx scripts/concepts.ts stamp",
     "console:export": "tsx scripts/consoleExport.ts"
   },
   "dependencies": {
